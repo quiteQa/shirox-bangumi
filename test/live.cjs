@@ -45,6 +45,10 @@ const moduleApi = require('../bangumi.js');
   const episodeMetadata = JSON.parse(await moduleApi.extractEpisodeMetadata(400602));
   assert.equal(episodeMetadata.length, 28);
   assert.ok(episodeMetadata.every(x => x.subjectId === 400602 && x.id > 0));
+  const topRated = JSON.parse(await moduleApi.browseMetadata('topRated', 1));
+  const newest = JSON.parse(await moduleApi.browseMetadata('newest', 1));
+  assert.ok(topRated.length > 0 && newest.length > 0);
+  assert.ok(topRated.every(x => x.source === 'bangumi' && x.type === 'ANIME'));
   const user = process.argv[2];
   let publicCollections;
   if (user) {
@@ -54,6 +58,7 @@ const moduleApi = require('../bangumi.js');
   console.log(JSON.stringify({ result: 'PASS', title: first.title, searchResults: results.length, airdate: detail.airdate,
     episodes: episodes.length, firstEpisode: episodes[0].number, lastEpisode: episodes.at(-1).number,
     metadata: { schemaVersion: metadata.schemaVersion, score: metadata.rating.score, scale: metadata.rating.scale,
-      tags: metadata.tags.length, studios: metadata.studios, episodeMetadataCount: episodeMetadata.length },
+      tags: metadata.tags.length, studios: metadata.studios, episodeMetadataCount: episodeMetadata.length,
+      topRatedCount: topRated.length, newestCount: newest.length },
     publicCollections, authenticatedWrites: 'not run', nativeShiroxPlayback: 'not run' }, null, 2));
 })().catch(error => { console.error(error.message); process.exitCode = 1; });

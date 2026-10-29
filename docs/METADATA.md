@@ -9,6 +9,7 @@
 | `Bangumi.getMetadata(value)` | `extractMetadata(value)` | 单个动画元数据对象 |
 | `Bangumi.searchMetadata(keyword)` | `searchMetadata(keyword)` | 元数据摘要数组 |
 | `Bangumi.getEpisodeMetadata(value)` | `extractEpisodeMetadata(value)` | 正片剧集元数据数组 |
+| `Bangumi.browseMetadata(catalog, page)` | `browseMetadata(catalog, page)` | 排行或首播日期目录数组 |
 
 对象接口返回 Promise，解析后直接得到对象或数组，不要再 `JSON.parse`。全局入口的 Promise 解析后得到 JSON 字符串，需要解析一次。
 
@@ -17,6 +18,8 @@
 - 正整数 subject ID，例如 `400602` 或字符串 `"400602"`。
 - `bgm:400602` / `subject:400602`。
 - `https://bgm.tv/subject/400602`，以及 bangumi.tv / chii.in 对应的 HTTPS 条目地址。
+
+`catalog` 只接受 `topRated`（官方 API 的 `sort=rank`）和 `newest`（`sort=date`）；每页 25 项，`page` 为 1–1000 的整数。最新首播是按条目播出日期排序，不声称是最近更新或正在播出。
 
 此处传的是 **subject ID**，不是 episode ID、AniList ID 或 MAL ID。脚本不会把这些来源的同号 ID 当作同一个作品，也不会将名称搜索的第一项自动认作已匹配作品。
 
@@ -97,6 +100,8 @@ number 与 episodeNumber 可能不同。章节 ID 更不能用这两个编号代
 ## 与原版 Shirox 的关系
 
 本项目保持 `searchResults`、`extractDetails`、`extractEpisodes` 三个原有模块入口兼容。
+
+0.3.0 将清单类型设为 `metadata`。配套 Shirox 源码补丁实现了该类型的独立选择、元数据检查、首页目录、搜索和详情；原版 Shirox 仍不具备这些接入点。
 
 `extractDetails` 仍返回一个数组，其中第一项包含 `description`、`aliases`、`airdate`；0.2.0 新增 `metadata` 嵌套对象，值与 `getMetadata` 相同。原版 `JSEngine+Details.swift` 只读取前面三个字段，会忽略 metadata；评分、标签和制作信息因此不会自动成为原生 UI 的独立字段。
 

@@ -1,8 +1,11 @@
 {
   "date": "2026-10-29",
-  "module_version": "0.2.0",
+  "module_version": "0.3.0",
   "metadata_schema_version": 1,
-  "offline_tests": { "passed": 30, "failed": 0 },
+  "offline_tests": {
+    "passed": 31,
+    "failed": 0
+  },
   "live_api": {
     "search": "passed",
     "subject_id": 400602,
@@ -15,8 +18,12 @@
     "structured_search_metadata": "passed",
     "structured_episode_metadata": "passed",
     "rating_scale": 10,
-    "studios": ["MADHOUSE"],
-    "authenticated_writes": "not tested; mocked only"
+    "studios": [
+      "MADHOUSE"
+    ],
+    "authenticated_writes": "not tested; mocked only",
+    "ranked_catalog": "passed; 25 records",
+    "premiere_date_catalog": "passed; 25 records"
   },
   "packaging": {
     "https_manifest_and_script": "passed",
@@ -24,8 +31,12 @@
   },
   "native_shirox": {
     "ios_macos_runtime": "not tested",
-    "global_metadata_provider_integration": "not implemented; not part of the plugin-interface scope",
+    "global_metadata_provider_integration": "implemented in native/shirox-metadata.patch; Xcode build not yet verified",
     "automatic_tracking_integration": "not implemented",
-    "video_playback": "not supported by bgm.tv"
+    "video_playback": "not supported by bgm.tv",
+    "swift_syntax": "checked with tree-sitter before execution environment disconnected; not a compiler check",
+    "xcode_project_references": "4 app source files and 1 XCTest file registered",
+    "i18n_and_icons": "passed before environment disconnect",
+    "xcode_build": "not run"
   }
 }

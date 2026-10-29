@@ -1,10 +1,10 @@
 {
   "sourceName": "Bangumi 动画元数据",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "baseUrl": "https://bgm.tv",
   "searchBaseUrl": "https://bgm.tv/subject_search/%s?cat=2",
   "scriptUrl": "https://raw.githubusercontent.com/quiteQa/shirox-bangumi/main/bangumi.js",
-  "type": "anime",
+  "type": "metadata",
   "language": "中文 / 日本語",
   "asyncJS": true,
   "softsub": false,

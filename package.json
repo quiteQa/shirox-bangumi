@@ -1,6 +1,6 @@
 {
   "name": "shirox-bangumi",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "private": true,
   "description": "Bangumi anime metadata interfaces with Shirox module compatibility",
   "scripts": {
@@ -8,5 +8,7 @@
     "test:live": "node test/live.cjs",
     "package": "node tools/package.cjs"
   },
-  "engines": { "node": ">=18" }
+  "engines": {
+    "node": ">=18"
+  }
 }

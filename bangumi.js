@@ -1,11 +1,11 @@
-/* Shirox Bangumi metadata module 0.2.0. No dependencies; JavaScriptCore compatible.
+/* Shirox Bangumi metadata module 0.3.0. No dependencies; JavaScriptCore compatible.
  * bgm.tv is a metadata/tracking service and provides no video streams.
  * Edit the config below locally, or call Bangumi.configure() from a custom host.
  */
 var BGM_CONFIG = {
     username: '',
     accessToken: '',
-    userAgent: 'quiteQa/ShiroxBangumi/0.2.0 (https://github.com/quiteQa/shirox-bangumi)',
+    userAgent: 'quiteQa/ShiroxBangumi/0.3.0 (https://github.com/quiteQa/shirox-bangumi)',
     searchLimit: 25
 };
 
@@ -221,6 +221,13 @@ var Bangumi = (function () {
     async function searchMetadata(keyword) {
         return (await searchSubjects(keyword)).map(function (item) { return metadata(item, 'search'); });
     }
+    async function browseMetadata(catalog, page) {
+        var sorts = { topRated: 'rank', newest: 'date' };
+        if (catalog !== 'topRated' && catalog !== 'newest') fail('不支持的元数据目录。');
+        page = page === undefined ? 1 : integer(page, 1, 1000, 'page');
+        var result = await request('/subjects?' + query({ type: 2, sort: sorts[catalog], limit: 25, offset: (page - 1) * 25 }));
+        return pageData(result).filter(isAnime).map(function (item) { return metadata(item, 'search'); });
+    }
     async function details(value) {
         var item = await getMetadata(value), info = [];
         if (item.rating.score !== null) info.push('Bangumi 评分：' + item.rating.score + '/10');
@@ -314,6 +321,7 @@ var Bangumi = (function () {
     return {
         configure: configure, search: search, details: details, episodes: episodes,
         searchMetadata: searchMetadata, getMetadata: getMetadata, getEpisodeMetadata: getEpisodeMetadata,
+        browseMetadata: browseMetadata,
         getSubject: getSubject, getEpisodes: getEpisodes,
         getCollections: getCollections, getCollection: getCollection, getMe: getMe,
         setCollection: setCollection, setEpisodeState: setEpisodeState
@@ -329,6 +337,7 @@ async function extractEpisodes(url) { return JSON.stringify(await Bangumi.episod
 async function searchMetadata(keyword) { return JSON.stringify(await Bangumi.searchMetadata(keyword)); }
 async function extractMetadata(url) { return JSON.stringify(await Bangumi.getMetadata(url)); }
 async function extractEpisodeMetadata(url) { return JSON.stringify(await Bangumi.getEpisodeMetadata(url)); }
+async function browseMetadata(catalog, page) { return JSON.stringify(await Bangumi.browseMetadata(catalog, page)); }
 async function extractStreamUrl() {
     throw new Error('[Bangumi] bgm.tv 不提供视频流；请切换到播放源。此模块不会把网页地址伪装成视频链接。');
 }
@@ -337,6 +346,7 @@ if (typeof module !== 'undefined' && module.exports) {
     module.exports = {
         Bangumi: Bangumi, searchResults: searchResults, extractDetails: extractDetails,
         extractEpisodes: extractEpisodes, extractStreamUrl: extractStreamUrl,
-        searchMetadata: searchMetadata, extractMetadata: extractMetadata, extractEpisodeMetadata: extractEpisodeMetadata
+        searchMetadata: searchMetadata, extractMetadata: extractMetadata, extractEpisodeMetadata: extractEpisodeMetadata,
+        browseMetadata: browseMetadata
     };
 }

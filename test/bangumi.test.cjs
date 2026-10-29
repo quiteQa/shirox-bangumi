@@ -297,3 +297,20 @@ test('metadata APIs filter disallowed content and blank searches without exposin
   assert.equal(await empty.ctx.searchMetadata('  '), '[]');
   assert.equal(empty.calls.length, 0);
 });
+
+test('metadata catalog uses read-only ranked or premiere-date pagination', async () => {
+  const h = harness(() => ({ data: { total: 1, data: [subject] } }));
+  const result = JSON.parse(await h.ctx.browseMetadata('topRated', 2));
+  assert.equal(result[0].id, 400602);
+  const url = new URL(h.calls[0].url);
+  assert.equal(url.pathname, '/v0/subjects');
+  assert.equal(url.searchParams.get('type'), '2');
+  assert.equal(url.searchParams.get('sort'), 'rank');
+  assert.equal(url.searchParams.get('offset'), '25');
+  await h.api.browseMetadata('newest');
+  assert.equal(new URL(h.calls[1].url).searchParams.get('sort'), 'date');
+  assert.ok(h.calls.every(x => x.method === 'GET'));
+  await assert.rejects(h.api.browseMetadata('__proto__'), /不支持/);
+  await assert.rejects(h.api.browseMetadata('topRated', 0), /page/);
+  assert.equal(h.calls.length, 2);
+});

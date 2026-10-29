@@ -1,10 +1,12 @@
 # Bangumi 动画元数据
 
-版本：**0.2.0** · [GitHub 仓库](https://github.com/quiteQa/shirox-bangumi) · [元数据字段说明](docs/METADATA.md)
+版本：**0.3.0** · [GitHub 仓库](https://github.com/quiteQa/shirox-bangumi) · [元数据字段说明](docs/METADATA.md) · [Shirox 源码集成](native/README.md)
 
 从 bgm.tv 读取动画元数据，供加载本脚本的插件或自定义宿主调用。主要提供中文与原文标题、别名、封面、简介、首播日期、评分、标签、制作公司、导演及剧集信息。公开动画元数据无需登录。
 
-**本版本提供插件内可调用的接口。原版 Shirox 不会因为导入这个模块，就自动将首页、搜索和详情页的数据源切换到 Bangumi。**
+**0.3.0 使用 `type: "metadata"`，需要支持元数据模块的 Shirox 构建。** 本仓库提供完整的 [Shirox 源码补丁](native/shirox-metadata.patch)，接入首页、搜索、详情、元数据健康检查及独立播放源选择。原版 Shirox 会将此类模块当成播放源并报告没有串流，仅更新插件不能修复这个宿主限制。
+
+当前提供的是源码集成；Xcode 构建状态与安装步骤见 [native/README.md](native/README.md)。本脚本仍可作为独立的 JavaScript 元数据客户端使用。
 
 ## 直接调用元数据接口
 
@@ -36,6 +38,7 @@ async function readAnimeMetadata() {
 | `extractMetadata(subjectIdOrUrl)` | 一个完整的动画条目元数据对象 |
 | `searchMetadata(keyword)` | 动画元数据摘要数组 |
 | `extractEpisodeMetadata(subjectIdOrUrl)` | 正片剧集元数据数组 |
+| `browseMetadata("topRated" 或 "newest", page)` | 评分排行或按首播日期排序的元数据数组，页码从 1 开始 |
 
 ```javascript
 async function readFromBridge() {
@@ -54,7 +57,7 @@ async function readFromBridge() {
 https://raw.githubusercontent.com/quiteQa/shirox-bangumi/main/bangumi.json
 ```
 
-清单使用完整 HTTPS 脚本地址。若自动检测提示没有播放流，选择 **Keep（保留）**：bgm.tv 提供元数据，不提供视频流。
+先安装应用了元数据补丁的 Shirox，再添加此链接。已安装旧版 Bangumi 模块时，点击模块页的刷新按钮，确认更新至 0.3.0，再运行“重新检查”。修改后的健康检查只读取元数据，不请求视频流。
 
 当前 Shirox 普通模块只会调用以下兼容入口：
 
@@ -67,14 +70,14 @@ https://raw.githubusercontent.com/quiteQa/shirox-bangumi/main/bangumi.json
 
 `extractDetails` 还返回嵌套的 `metadata` 对象，但原版 Shirox 的解析器会忽略这个额外字段；新增的三个结构化入口也需要调用方主动调用。它们不是 Shirox 已有的官方元数据扩展协议。
 
-模块清单仍使用 Shirox 能识别的 `type: "anime"`，没有虚构 `type: "metadata"` 来绕过宿主限制。
+0.3.0 的 `type: "metadata"` 由配套源码补丁明确实现。它让原生界面主动调用结构化入口，并防止模块进入播放和下载源列表。
 
 ## 从文件导入
 
 1. 下载 `bangumi.js` 和 `bangumi.json`。
 2. 打开 Shirox → Settings → Modules → **Import from Files**。
 3. Script 选择 `bangumi.js`，Manifest 选择 `bangumi.json`，然后添加。
-4. 如果播放流检测失败，选择 Keep。
+4. 确认使用的是支持元数据模块的 Shirox 构建；原版 App 的播放流检测不适用于此模块。
 
 旧版 Shirox 若没有从文件导入入口，可使用上面的 URL 导入方式。更换播放源不会自动让那个播放源调用本模块的元数据接口。
 
@@ -125,9 +128,9 @@ npm test
 npm run test:live
 ```
 
-30 项离线测试覆盖元数据字段、评分量纲、日期与缺失值、两种剧集编号、搜索摘要、兼容入口、分页、错误处理及模拟写入。联网测试只读取公开 API，验证《葬送的芙莉莲》及其 28 集正片的结构化元数据。
+31 项离线测试覆盖元数据字段、评分量纲、日期与缺失值、两种剧集编号、目录分页、搜索摘要、兼容入口、错误处理及模拟写入。联网测试只读取公开 API，验证《葬送的芙莉莲》及其 28 集正片、评分排行和最新首播目录。
 
-验证环境为 Node VM、模拟的 Shirox 网络桥和真实 Bangumi API；没有在 iPhone/macOS Shirox 客户端内运行，也没有修改 Shirox 的原生 Provider。
+JavaScript 验证环境为 Node VM、模拟的 Shirox 网络桥和真实 Bangumi API。原生源码补丁通过 Swift 语法、工程引用、本地化及图标检查；这不等同于 Xcode 编译或真机运行成功。原生集成不增加账号追踪服务，不向 AniList/MAL 发送 Bangumi ID。
 
 ## 接口依据
 
