@@ -40,3 +40,13 @@ https://raw.githubusercontent.com/quiteQa/shirox-bangumi/main/bangumi.json
 已提供 MetadataModuleTests，但本机没有 Xcode，尚未执行原生 XCTest。
 
 提供 macOS 构建工作流验证四个 scheme，并在不启动模拟器的情况下编译测试目标。只有实际 Actions 构建成功后才会生成需要自行签名的 IPA。
+
+## 已验证的构建
+
+[严格构建记录](https://github.com/quiteQa/shirox-bangumi/actions/runs/40844088237) · [SwiftLint 记录](https://github.com/quiteQa/shirox-bangumi/actions/runs/40844088197)
+
+iOS、macOS、tvOS、Mac Catalyst 四个 App 构建通过；iOS 测试目标的 arm64 模拟器版本编译通过。测试没有执行，也没有进行真机验证。上游依赖的 libzstd / AppIntents 构建警告仍可见。
+
+[下载 iOS 构建产物](https://github.com/quiteQa/shirox-bangumi/actions/runs/40844088237/artifacts/12883669458)，解压后得到未签名的 Shirox-metadata-unsigned.ipa，需用自己的签名方式安装。随后在 App 的模块页刷新 Bangumi 到 0.3.0 并重新检查。
+
+补丁还拆分了一处上游 TSAudioTimestampsTests 的复杂表达式，保持测试含义不变，以解决 Xcode 类型检查超时。CI 显式启用 bash pipefail，避免输出到日志的管道掩盖编译失败。

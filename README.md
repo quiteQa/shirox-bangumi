@@ -6,7 +6,7 @@
 
 **0.3.0 使用 `type: "metadata"`，需要支持元数据模块的 Shirox 构建。** 本仓库提供完整的 [Shirox 源码补丁](native/shirox-metadata.patch)，接入首页、搜索、详情、元数据健康检查及独立播放源选择。原版 Shirox 会将此类模块当成播放源并报告没有串流，仅更新插件不能修复这个宿主限制。
 
-当前提供的是源码集成；Xcode 构建状态与安装步骤见 [native/README.md](native/README.md)。本脚本仍可作为独立的 JavaScript 元数据客户端使用。
+四个平台的 App 构建和 iOS 测试目标编译已经通过：[构建记录](https://github.com/quiteQa/shirox-bangumi/actions/runs/40844088237) · [下载未签名 iOS 构建](https://github.com/quiteQa/shirox-bangumi/actions/runs/40844088237/artifacts/12883669458)。下载并解压产物后，使用自己的签名方式安装其中的 `Shirox-metadata-unsigned.ipa`。源码与安装步骤见 [native/README.md](native/README.md)，本脚本也可独立调用。
 
 ## 直接调用元数据接口
 
@@ -130,7 +130,7 @@ npm run test:live
 
 31 项离线测试覆盖元数据字段、评分量纲、日期与缺失值、两种剧集编号、目录分页、搜索摘要、兼容入口、错误处理及模拟写入。联网测试只读取公开 API，验证《葬送的芙莉莲》及其 28 集正片、评分排行和最新首播目录。
 
-JavaScript 验证环境为 Node VM、模拟的 Shirox 网络桥和真实 Bangumi API。原生源码补丁通过 Swift 语法、工程引用、本地化及图标检查；这不等同于 Xcode 编译或真机运行成功。原生集成不增加账号追踪服务，不向 AniList/MAL 发送 Bangumi ID。
+JavaScript 的 31 项测试及真实只读 API 测试通过。配套源码补丁已在 GitHub macOS runner 上通过 iOS、macOS、tvOS、Mac Catalyst 构建，iOS 测试目标的 arm64 模拟器版本编译通过，SwiftLint、本地化与图标检查通过。原生 XCTest 没有执行，也尚未做真机运行验证。原生集成不增加账号追踪服务，不向 AniList/MAL 发送 Bangumi ID。
 
 ## 接口依据
 

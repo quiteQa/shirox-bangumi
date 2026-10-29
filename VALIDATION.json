@@ -31,12 +31,25 @@
   },
   "native_shirox": {
     "ios_macos_runtime": "not tested",
-    "global_metadata_provider_integration": "implemented in native/shirox-metadata.patch; Xcode build not yet verified",
+    "global_metadata_provider_integration": "implemented in native/shirox-metadata.patch; all four app builds verified",
     "automatic_tracking_integration": "not implemented",
     "video_playback": "not supported by bgm.tv",
     "swift_syntax": "checked with tree-sitter before execution environment disconnected; not a compiler check",
     "xcode_project_references": "4 app source files and 1 XCTest file registered",
     "i18n_and_icons": "passed before environment disconnect",
-    "xcode_build": "not run"
+    "xcode_build": {
+      "run_url": "https://github.com/quiteQa/shirox-bangumi/actions/runs/40844088237",
+      "source_commit": "5bfff6742955e282fad81bf6c32b66dbddbbbda1",
+      "Shirox_iOS": "success",
+      "Shirox_macOS": "success",
+      "Shirox_tvOS": "success",
+      "Shirox_MacCatalyst": "success"
+    },
+    "xctest_compilation": "success; arm64 iOS Simulator; TEST BUILD SUCCEEDED",
+    "xctest_execution": "not run; simulator not booted",
+    "swiftlint": "strict check passed in run 40844088197",
+    "unsigned_ios_artifact": "https://github.com/quiteQa/shirox-bangumi/actions/runs/40844088237/artifacts/12883669458",
+    "warnings": "upstream libzstd module-import and AppIntents metadata warnings remain",
+    "real_device_validation": "not performed"
   }
 }
