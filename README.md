@@ -8,6 +8,8 @@
 
 四个平台的 App 构建和 iOS 测试目标编译已经通过：[构建记录](https://github.com/quiteQa/shirox-bangumi/actions/runs/40844088237) · [下载未签名 iOS 构建](https://github.com/quiteQa/shirox-bangumi/actions/runs/40844088237/artifacts/12883669458)。下载并解压产物后，使用自己的签名方式安装其中的 `Shirox-metadata-unsigned.ipa`。源码与安装步骤见 [native/README.md](native/README.md)，本脚本也可独立调用。
 
+完整 App 源码现已推送至公开 Fork：[quiteQa/Shirox](https://github.com/quiteQa/Shirox)。直接克隆该 Fork 即可构建，无需手动应用补丁。
+
 ## 直接调用元数据接口
 
 在已加载 `bangumi.js` 的 JavaScript 环境中：
