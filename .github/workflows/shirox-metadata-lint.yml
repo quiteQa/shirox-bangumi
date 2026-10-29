@@ -1,0 +1,32 @@
+name: Lint Shirox metadata integration
+on:
+  push:
+    paths:
+      - native/shirox-metadata.patch
+      - .github/workflows/shirox-metadata-lint.yml
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  lint:
+    runs-on: macos-26
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/checkout@v4
+        with:
+          repository: xibrox/Shirox
+          ref: 398d36715b34a17ec68bfd52d792f7a2e7db06f5
+          path: Shirox
+          persist-credentials: false
+      - name: Apply patch
+        run: git -C Shirox apply ../native/shirox-metadata.patch
+      - name: SwiftLint
+        working-directory: Shirox
+        run: |
+          if ! command -v swiftlint >/dev/null 2>&1; then
+            brew install swiftlint
+          fi
+          swiftlint lint --strict
