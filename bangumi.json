@@ -1,6 +1,6 @@
 {
-  "sourceName": "Bangumi 番组计划（条目与收藏）",
-  "version": "0.1.0",
+  "sourceName": "Bangumi 动画元数据",
+  "version": "0.2.0",
   "baseUrl": "https://bgm.tv",
   "searchBaseUrl": "https://bgm.tv/subject_search/%s?cat=2",
   "scriptUrl": "https://raw.githubusercontent.com/quiteQa/shirox-bangumi/main/bangumi.js",
@@ -8,6 +8,6 @@
   "language": "中文 / 日本語",
   "asyncJS": true,
   "softsub": false,
-  "description": "bgm.tv 条目、详情、正片集数、公开收藏查询。无视频流；自动追番同步需要宿主源码接入。",
+  "description": "Bangumi 动画元数据：标题、封面、简介、评分、标签、制作信息与剧集。结构化元数据接口需宿主适配，原版 Shirox 不会自动将其设为全局元数据源。",
   "supportsShirox": true
 }

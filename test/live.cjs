@@ -30,6 +30,21 @@ const moduleApi = require('../bangumi.js');
   assert.equal(episodes.at(-1).number, 28);
   assert.ok(episodes.every(x => /^https:\/\/bgm\.tv\/ep\/\d+$/.test(x.href)));
   await assert.rejects(moduleApi.extractStreamUrl(episodes[0].href), /不提供视频流/);
+  const metadata = JSON.parse(await moduleApi.extractMetadata(400602));
+  assert.equal(metadata.source, 'bangumi');
+  assert.equal(metadata.id, 400602);
+  assert.equal(metadata.title, first.title);
+  assert.equal(metadata.episodeCount, 28);
+  assert.equal(metadata.year, 2023);
+  assert.equal(metadata.rating.scale, 10);
+  assert.ok(metadata.rating.score > 0 && metadata.rating.score <= 10);
+  assert.ok(metadata.poster.startsWith('https://'));
+  assert.ok(Array.isArray(metadata.studios));
+  const summaries = JSON.parse(await moduleApi.searchMetadata('葬送的芙莉莲'));
+  assert.ok(summaries.some(x => x.id === 400602 && x.detailLevel === 'search'));
+  const episodeMetadata = JSON.parse(await moduleApi.extractEpisodeMetadata(400602));
+  assert.equal(episodeMetadata.length, 28);
+  assert.ok(episodeMetadata.every(x => x.subjectId === 400602 && x.id > 0));
   const user = process.argv[2];
   let publicCollections;
   if (user) {
@@ -38,5 +53,7 @@ const moduleApi = require('../bangumi.js');
   }
   console.log(JSON.stringify({ result: 'PASS', title: first.title, searchResults: results.length, airdate: detail.airdate,
     episodes: episodes.length, firstEpisode: episodes[0].number, lastEpisode: episodes.at(-1).number,
+    metadata: { schemaVersion: metadata.schemaVersion, score: metadata.rating.score, scale: metadata.rating.scale,
+      tags: metadata.tags.length, studios: metadata.studios, episodeMetadataCount: episodeMetadata.length },
     publicCollections, authenticatedWrites: 'not run', nativeShiroxPlayback: 'not run' }, null, 2));
 })().catch(error => { console.error(error.message); process.exitCode = 1; });

@@ -1,11 +1,11 @@
-/* Shirox Bangumi module 0.1.0. No dependencies; JavaScriptCore compatible.
+/* Shirox Bangumi metadata module 0.2.0. No dependencies; JavaScriptCore compatible.
  * bgm.tv is a metadata/tracking service and provides no video streams.
  * Edit the config below locally, or call Bangumi.configure() from a custom host.
  */
 var BGM_CONFIG = {
     username: '',
     accessToken: '',
-    userAgent: 'quiteQa/ShiroxBangumi/0.1.0 (https://github.com/quiteQa/shirox-bangumi)',
+    userAgent: 'quiteQa/ShiroxBangumi/0.2.0 (https://github.com/quiteQa/shirox-bangumi)',
     searchLimit: 25
 };
 
@@ -120,7 +120,7 @@ var Bangumi = (function () {
     function searchItem(item) {
         var id = positiveId(item.id), images = item.images || {};
         return {
-            title: item.name_cn || item.name || ('Bangumi #' + id),
+            title: text(item.name_cn) || text(item.name) || ('Bangumi #' + id),
             image: images.large || images.common || images.medium || images.small || '',
             href: SITE + '/subject/' + id
         };
@@ -130,44 +130,106 @@ var Bangumi = (function () {
         if (!isAnime(item)) fail('此模块仅支持非成人动画条目。');
         return item;
     }
-    async function search(keyword) {
+    async function searchSubjects(keyword) {
         keyword = String(keyword == null ? '' : keyword).trim();
         if (!keyword) return [];
         if (/^(?:bgm:|subject:|https:\/\/(?:bgm\.tv|bangumi\.tv|chii\.in)\/subject\/)/i.test(keyword)) {
-            return [searchItem(await getSubject(keyword))];
+            return [await getSubject(keyword)];
         }
         var command = keyword.match(/^(想看|看过|在看|搁置|抛弃|收藏)(?:\s+(.+))?$/);
         if (command) {
             var username = (command[2] || BGM_CONFIG.username || '').trim();
             if (!username) fail('请先设置 BGM_CONFIG.username，或搜索“在看 用户名”。');
             var page = await getCollections(username, { type: STATUS[command[1]], limit: BGM_CONFIG.searchLimit });
-            return page.data.map(function (entry) { return entry.subject; }).filter(isAnime).map(searchItem);
+            return page.data.map(function (entry) { return entry.subject; }).filter(isAnime);
         }
         var result = await request('/search/subjects?' + query({ limit: BGM_CONFIG.searchLimit, offset: 0 }), 'POST', {
             keyword: keyword, sort: 'match', filter: { type: [2], nsfw: false }
         });
-        return pageData(result).filter(isAnime).map(searchItem);
+        return pageData(result).filter(isAnime);
     }
-    function aliases(item) {
+    async function search(keyword) { return (await searchSubjects(keyword)).map(searchItem); }
+    function aliasList(item) {
         var names = [item.name, item.name_cn];
-        (item.infobox || []).forEach(function (field) {
-            if (field.key !== '别名') return;
+        (Array.isArray(item.infobox) ? item.infobox : []).forEach(function (field) {
+            if (!field || field.key !== '别名') return;
             if (typeof field.value === 'string') names.push(field.value);
             else if (Array.isArray(field.value)) field.value.forEach(function (x) {
                 if (x && typeof x.v === 'string') names.push(x.v);
             });
         });
-        return names.filter(function (x, i, all) { return x && all.indexOf(x) === i; }).join(' / ');
+        return names.map(function (x) { return text(x); })
+            .filter(function (x, i, all) { return x && all.indexOf(x) === i; });
+    }
+    function text(value) { return typeof value === 'string' && value.trim() ? value.trim() : null; }
+    function count(value) { return Number.isSafeInteger(value) && value > 0 ? value : null; }
+    function date(value) {
+        if (typeof value !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(value)) return null;
+        var parsed = new Date(value + 'T00:00:00Z');
+        return !isNaN(parsed.getTime()) && parsed.toISOString().slice(0, 10) === value ? value : null;
+    }
+    function fieldValues(item, key) {
+        var output = [];
+        (Array.isArray(item.infobox) ? item.infobox : []).forEach(function (field) {
+            if (!field || field.key !== key) return;
+            var values = Array.isArray(field.value) ? field.value.map(function (v) { return v && v.v; }) : [field.value];
+            values.forEach(function (v) { if (text(v) && output.indexOf(v.trim()) === -1) output.push(v.trim()); });
+        });
+        return output;
+    }
+    function metadata(item, detailLevel) {
+        var id = positiveId(item.id), images = item.images || {}, rating = item.rating || {};
+        var score = typeof rating.score === 'number' ? rating.score : item.score;
+        var rank = rating.rank || item.rank, releaseDate = date(item.date);
+        var tags = (Array.isArray(item.tags) ? item.tags : []).map(function (tag) {
+            return text(typeof tag === 'string' ? tag : tag && tag.name);
+        }).filter(function (tag, i, all) { return tag && all.indexOf(tag) === i; });
+        return {
+            schemaVersion: 1,
+            source: 'bangumi',
+            id: id,
+            url: SITE + '/subject/' + id,
+            detailLevel: detailLevel,
+            type: 'ANIME',
+            title: text(item.name_cn) || text(item.name) || ('Bangumi #' + id),
+            titles: { chinese: text(item.name_cn), original: text(item.name) },
+            aliases: aliasList(item),
+            description: text(item.summary) || text(item.short_summary) || '',
+            poster: text(images.large) || text(images.common) || text(images.medium) || text(images.small) || text(item.image),
+            images: {
+                large: text(images.large), common: text(images.common), medium: text(images.medium),
+                small: text(images.small), grid: text(images.grid)
+            },
+            format: text(item.platform),
+            releaseDate: releaseDate,
+            year: releaseDate ? Number(releaseDate.slice(0, 4)) : null,
+            episodeCount: count(item.eps),
+            totalEpisodes: count(item.total_episodes),
+            // Bangumi tags are community labels, not a strict genre taxonomy.
+            tags: tags,
+            studios: fieldValues(item, '动画制作'),
+            directors: fieldValues(item, '导演'),
+            rating: {
+                score: typeof score === 'number' && isFinite(score) && score > 0 && score <= 10 ? score : null,
+                scale: 10,
+                rank: count(rank),
+                votes: Number.isSafeInteger(rating.total) && rating.total >= 0 ? rating.total : null
+            }
+        };
+    }
+    async function getMetadata(value) { return metadata(await getSubject(value), 'subject'); }
+    async function searchMetadata(keyword) {
+        return (await searchSubjects(keyword)).map(function (item) { return metadata(item, 'search'); });
     }
     async function details(value) {
-        var item = await getSubject(value), rating = item.rating || {}, info = [];
-        if (typeof rating.score === 'number') info.push('Bangumi 评分：' + rating.score + '/10');
-        if (rating.rank > 0) info.push('排名：#' + rating.rank);
-        if (item.eps > 0) info.push('正片集数：' + item.eps);
-        if (item.platform) info.push('类型：' + item.platform);
-        if (item.summary) info.push(item.summary);
+        var item = await getMetadata(value), info = [];
+        if (item.rating.score !== null) info.push('Bangumi 评分：' + item.rating.score + '/10');
+        if (item.rating.rank !== null) info.push('排名：#' + item.rating.rank);
+        if (item.episodeCount !== null) info.push('正片集数：' + item.episodeCount);
+        if (item.format) info.push('类型：' + item.format);
+        if (item.description) info.push(item.description);
         info.push('此模块展示 Bangumi 条目数据；bgm.tv 不提供视频流。');
-        return [{ description: info.join('\n\n'), aliases: aliases(item), airdate: item.date || '' }];
+        return [{ description: info.join('\n\n'), aliases: item.aliases.join(' / '), airdate: item.releaseDate || '', metadata: item }];
     }
     async function getEpisodes(value) {
         var id = subjectId(value);
@@ -182,6 +244,21 @@ var Bangumi = (function () {
         return rows.filter(function (ep) { return typeof ep.sort === 'number' && isFinite(ep.sort) && ep.sort > 0; })
             .map(function (ep) {
                 return { number: ep.sort, href: SITE + '/ep/' + positiveId(ep.id) };
+            });
+    }
+    async function getEpisodeMetadata(value) {
+        var id = subjectId(value), rows = await getEpisodes(id);
+        return rows.filter(function (ep) { return typeof ep.sort === 'number' && isFinite(ep.sort) && ep.sort > 0; })
+            .map(function (ep) {
+                return {
+                    source: 'bangumi', id: positiveId(ep.id), subjectId: id,
+                    number: ep.sort,
+                    episodeNumber: typeof ep.ep === 'number' && isFinite(ep.ep) && ep.ep > 0 ? ep.ep : null,
+                    title: text(ep.name_cn) || text(ep.name) || ('第 ' + ep.sort + ' 集'),
+                    originalTitle: text(ep.name), description: text(ep.desc) || '',
+                    airdate: date(ep.airdate), duration: text(ep.duration),
+                    durationSeconds: count(ep.duration_seconds), url: SITE + '/ep/' + positiveId(ep.id)
+                };
             });
     }
     function usernamePath(username) {
@@ -236,6 +313,7 @@ var Bangumi = (function () {
     }
     return {
         configure: configure, search: search, details: details, episodes: episodes,
+        searchMetadata: searchMetadata, getMetadata: getMetadata, getEpisodeMetadata: getEpisodeMetadata,
         getSubject: getSubject, getEpisodes: getEpisodes,
         getCollections: getCollections, getCollection: getCollection, getMe: getMe,
         setCollection: setCollection, setEpisodeState: setEpisodeState
@@ -246,6 +324,11 @@ var Bangumi = (function () {
 async function searchResults(keyword) { return JSON.stringify(await Bangumi.search(keyword)); }
 async function extractDetails(url) { return JSON.stringify(await Bangumi.details(url)); }
 async function extractEpisodes(url) { return JSON.stringify(await Bangumi.episodes(url)); }
+// Structured metadata entry points for hosts that explicitly implement this contract.
+// Unmodified Shirox does not call these automatically.
+async function searchMetadata(keyword) { return JSON.stringify(await Bangumi.searchMetadata(keyword)); }
+async function extractMetadata(url) { return JSON.stringify(await Bangumi.getMetadata(url)); }
+async function extractEpisodeMetadata(url) { return JSON.stringify(await Bangumi.getEpisodeMetadata(url)); }
 async function extractStreamUrl() {
     throw new Error('[Bangumi] bgm.tv 不提供视频流；请切换到播放源。此模块不会把网页地址伪装成视频链接。');
 }
@@ -253,6 +336,7 @@ async function extractStreamUrl() {
 if (typeof module !== 'undefined' && module.exports) {
     module.exports = {
         Bangumi: Bangumi, searchResults: searchResults, extractDetails: extractDetails,
-        extractEpisodes: extractEpisodes, extractStreamUrl: extractStreamUrl
+        extractEpisodes: extractEpisodes, extractStreamUrl: extractStreamUrl,
+        searchMetadata: searchMetadata, extractMetadata: extractMetadata, extractEpisodeMetadata: extractEpisodeMetadata
     };
 }

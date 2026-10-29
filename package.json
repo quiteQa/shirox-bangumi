@@ -1,8 +1,8 @@
 {
   "name": "shirox-bangumi",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "private": true,
-  "description": "Bangumi metadata module and tracking API client for Shirox",
+  "description": "Bangumi anime metadata interfaces with Shirox module compatibility",
   "scripts": {
     "test": "node test/bangumi.test.cjs",
     "test:live": "node test/live.cjs",

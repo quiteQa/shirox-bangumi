@@ -1,7 +1,8 @@
 {
   "date": "2026-10-29",
-  "module_version": "0.1.0",
-  "offline_tests": { "passed": 23, "failed": 0 },
+  "module_version": "0.2.0",
+  "metadata_schema_version": 1,
+  "offline_tests": { "passed": 30, "failed": 0 },
   "live_api": {
     "search": "passed",
     "subject_id": 400602,
@@ -10,7 +11,11 @@
     "episodes": 28,
     "first_episode": 1,
     "last_episode": 28,
-    "public_collections": "passed",
+    "structured_subject_metadata": "passed",
+    "structured_search_metadata": "passed",
+    "structured_episode_metadata": "passed",
+    "rating_scale": 10,
+    "studios": ["MADHOUSE"],
     "authenticated_writes": "not tested; mocked only"
   },
   "packaging": {
@@ -19,6 +24,7 @@
   },
   "native_shirox": {
     "ios_macos_runtime": "not tested",
+    "global_metadata_provider_integration": "not implemented; not part of the plugin-interface scope",
     "automatic_tracking_integration": "not implemented",
     "video_playback": "not supported by bgm.tv"
   }

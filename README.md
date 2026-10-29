@@ -1,149 +1,137 @@
-# Shirox Bangumi 番组计划模块
+# Bangumi 动画元数据
 
-版本：0.1.0。基于 2026-10-29 查看的 Shirox `main` 模块接口与 Bangumi v0 API。
+版本：**0.2.0** · [GitHub 仓库](https://github.com/quiteQa/shirox-bangumi) · [元数据字段说明](docs/METADATA.md)
 
-代码仓库：[quiteQa/shirox-bangumi](https://github.com/quiteQa/shirox-bangumi) · [模块清单](https://raw.githubusercontent.com/quiteQa/shirox-bangumi/main/bangumi.json) · [模块脚本](https://raw.githubusercontent.com/quiteQa/shirox-bangumi/main/bangumi.js)
+从 bgm.tv 读取动画元数据，供加载本脚本的插件或自定义宿主调用。主要提供中文与原文标题、别名、封面、简介、首播日期、评分、标签、制作公司、导演及剧集信息。公开动画元数据无需登录。
 
-用于 Shirox 的 **bgm.tv 条目与公开收藏查询模块**，支持 URL 和文件导入，并附带可供宿主接入的收藏、评分及章节进度修改 API。
+**本版本提供插件内可调用的接口。原版 Shirox 不会因为导入这个模块，就自动将首页、搜索和详情页的数据源切换到 Bangumi。**
 
-## URL 导入
+## 直接调用元数据接口
 
-将下面的完整地址复制到 **Shirox → Settings（设置）→ Modules（模块）** 的添加模块 URL 输入框：
+在已加载 `bangumi.js` 的 JavaScript 环境中：
+
+```javascript
+async function readAnimeMetadata() {
+    // 返回对象；支持 Bangumi subject ID、bgm:ID 或已知域名的 HTTPS 条目地址。
+    var anime = await Bangumi.getMetadata(400602);
+
+    // 返回元数据摘要数组，不为每个搜索结果额外请求详情。
+    var matches = await Bangumi.searchMetadata('葬送的芙莉莲');
+
+    // 返回正片的章节 ID、两种集数编号、标题、简介、播出日期和时长。
+    var episodes = await Bangumi.getEpisodeMetadata(400602);
+
+    return { anime: anime, matches: matches, episodes: episodes };
+}
+```
+
+独立网络环境需提供标准 `fetch`；Shirox 中使用宿主的 `fetchv2`。脚本无第三方运行时依赖。
+
+## JSON 字符串入口
+
+通过 Shirox 风格 JS 桥接调用时，使用以下全局函数。它们返回 **JSON 字符串**，调用方应解析一次：
+
+| 函数 | JSON 解析后的结果 |
+| --- | --- |
+| `extractMetadata(subjectIdOrUrl)` | 一个完整的动画条目元数据对象 |
+| `searchMetadata(keyword)` | 动画元数据摘要数组 |
+| `extractEpisodeMetadata(subjectIdOrUrl)` | 正片剧集元数据数组 |
+
+```javascript
+async function readFromBridge() {
+    var anime = JSON.parse(await extractMetadata('https://bgm.tv/subject/400602'));
+    return { title: anime.title, poster: anime.poster, score: anime.rating.score };
+}
+```
+
+评分保留 Bangumi 的 **10 分制**；缺失字段使用 `null` 或空数组，不根据首播日期猜测完结状态。Bangumi 的社区标签保留为 `tags`，不冒充严格的题材分类。字段、单位及空值规则见 [METADATA.md](docs/METADATA.md)。
+
+## 在 Shirox 中通过 URL 导入
+
+复制下面的地址到 **Shirox → Settings（设置）→ Modules（模块）** 的添加模块 URL 输入框：
 
 ```text
 https://raw.githubusercontent.com/quiteQa/shirox-bangumi/main/bangumi.json
 ```
 
-点击添加，Shirox 会从清单中的完整 HTTPS 地址下载 `bangumi.js`。如果自动检测提示没有播放流，选择 **Keep（保留）**：这是条目和收藏查询模块，bgm.tv 不提供视频流。
+清单使用完整 HTTPS 脚本地址。若自动检测提示没有播放流，选择 **Keep（保留）**：bgm.tv 提供元数据，不提供视频流。
 
-**URL 导入要求仓库设为 Public（公开）**，让清单和脚本都可匿名读取。私有仓库的网页链接、登录 Cookie 和临时 Raw Token 不能作为长期安装链接。若链接返回 404，请先检查仓库可见性；也可以使用下文的文件导入。
+当前 Shirox 普通模块只会调用以下兼容入口：
 
-## 能做什么
-
-| 功能 | 本版本 |
+| 入口 | 原版 Shirox 可使用的数据 |
 | --- | --- |
-| 动画搜索、中文标题、封面 | 可用，无需登录 |
-| 详情、别名、评分、首播日期 | 可用，无需登录 |
-| 正片剧集列表 | 可用，自动分页，保留 Bangumi 集数编号 |
-| 按用户名查询公开动画收藏 | 可用，通过模块搜索命令或 API；不是导入 Shirox 资料库 |
-| 收藏类型、评分修改 | 提供 `Bangumi.setCollection`，需 Token，Shirox 原版不会调用 |
-| 标记明确的章节为看过等状态 | 提供 `Bangumi.setEpisodeState`，需 Token，Shirox 原版不会调用 |
-| Bangumi 账号登录与自动同步 | **未接入**，需要修改 Shirox 原生源码 |
-| 视频播放与下载 | **不提供**，bgm.tv 本身没有视频流 |
+| `searchResults(keyword)` | 标题、封面、条目链接 |
+| `extractDetails(subjectIdOrUrl)` | 简介、别名、日期；评分以简介文字展示 |
+| `extractEpisodes(subjectIdOrUrl)` | 正片集数与章节链接 |
+| `extractStreamUrl()` | 明确提示 bgm.tv 没有视频流 |
 
-它不会替换 Shirox 首页的 AniList/MyAnimeList，也不会因你在另一个模块中看完一集而修改 Bangumi。
+`extractDetails` 还返回嵌套的 `metadata` 对象，但原版 Shirox 的解析器会忽略这个额外字段；新增的三个结构化入口也需要调用方主动调用。它们不是 Shirox 已有的官方元数据扩展协议。
 
-## 从文件安装
+模块清单仍使用 Shirox 能识别的 `type: "anime"`，没有虚构 `type: "metadata"` 来绕过宿主限制。
 
-1. 解压，把 `bangumi.js` 和 `bangumi.json` 保存到设备的“文件”中。
-2. 打开 Shirox → Settings（设置）→ Modules（模块）→ **Import from Files（从文件导入）**。
-3. 在 Script 一栏选择 `bangumi.js`。
-4. 在 Manifest 一栏选择 `bangumi.json`，填入名称、类型等信息。
-5. 点击 Add。若自动检测报告“无法获取播放流”，选择 **Keep（保留）**：Shirox 的检测把“能播放视频”作为通过条件，而此模块是条目查询模块。
+## 从文件导入
 
-原版 Shirox 没有“元数据模块”分类，因此清单使用它支持的 `anime` 类型，播放入口会明确解释没有视频流。不要把检测失败误认为已实现播放功能。
+1. 下载 `bangumi.js` 和 `bangumi.json`。
+2. 打开 Shirox → Settings → Modules → **Import from Files**。
+3. Script 选择 `bangumi.js`，Manifest 选择 `bangumi.json`，然后添加。
+4. 如果播放流检测失败，选择 Keep。
 
-此安装方式依据当前 `main` 中的 `ModuleImportView`；如果你安装的版本没有“从文件导入”，需更新到具备该功能的版本，或使用下文的 HTTPS 托管方式。
+旧版 Shirox 若没有从文件导入入口，可使用上面的 URL 导入方式。更换播放源不会自动让那个播放源调用本模块的元数据接口。
 
-## 搜索用法
+## 元数据字段
 
-在支持直接搜索模块的入口中输入：
-
-| 输入 | 结果 |
+| 字段 | 内容 |
 | --- | --- |
-| `葬送的芙莉莲` / `Frieren` | 搜索动画条目 |
-| `bgm:400602` | 直接打开这个 Bangumi 动画条目 |
-| `https://bgm.tv/subject/400602` | 按条目地址查询；也接受 bangumi.tv / chii.in 的 HTTPS 条目地址 |
-| `在看 sai` | 查询该用户的在看动画 |
-| `想看 sai` / `看过 sai` / `搁置 sai` / `抛弃 sai` | 按收藏状态查询 |
-| `收藏 sai` | 查询该用户所有状态的动画收藏，默认最多 25 项 |
+| `source` / `id` / `url` | 数据来源、Bangumi 条目 ID、原条目链接 |
+| `title` / `titles` / `aliases` | 优先中文标题、中文与原文标题、去重后的别名 |
+| `poster` / `images` | 推荐封面及各尺寸封面地址 |
+| `description` | 纯剧情简介；不混入评分说明 |
+| `releaseDate` / `year` / `format` | 首播日期、年份、TV/剧场版等平台原值 |
+| `episodeCount` / `totalEpisodes` | API 给出的正片数量及总集数；分别保留 |
+| `rating` | 评分、10 分制、排名、评分人数 |
+| `tags` / `studios` / `directors` | 社区标签、条目信息中的动画制作公司和导演 |
 
-`sai` 只是公开用户名示例，请换成你自己的 **用户名/ID，不是昵称**。
+剧集元数据提供 `id`、`subjectId`、`number`、`episodeNumber`、`title`、`originalTitle`、`description`、`airdate`、`duration`、`durationSeconds` 和 `url`。只列正片，自动获取全部分页。
 
-想简写为 `在看`，在 JS 顶部把 `BGM_CONFIG.username` 改成自己的用户名，再重新导入；也可以通过 Shirox 的脚本编辑器修改。
+## 原有查询与追踪 API
 
-模块搜索结果最多 25 项，可在本机把 `searchLimit` 调到 1–50。需要完整收藏的调用者应使用 `getCollections` 的 `offset` 分页，不能把一页结果当作完整资料库。剧集列表会自动获取所有分页；只列 `type=0` 正片，不把 SP、OP、ED 混入进度。
+保留 0.1.0 的收藏查询和手动追踪 API，供已有调用者使用。它们不会被元数据读取过程触发：
 
-## 收藏与进度 API：供宿主开发者接入
+- `Bangumi.getCollections(username, { type, limit, offset })`：分页读取公开动画收藏。
+- `Bangumi.getCollection(username, subjectId)`：读取单个收藏。
+- `Bangumi.setCollection(subjectId, change)`：需要 Token，手动修改明确传入的收藏类型、评分等字段。
+- `Bangumi.setEpisodeState(subjectId, episodeIds, state)`：需要 Token，校验章节归属后修改明确的正片章节 ID。
 
-以下函数是 API 客户端能力，**原版 Shirox 没有调用它们的按钮或播放回调**。不能仅通过导入清单获得自动追番同步。
+普通模块搜索仍支持 `bgm:400602`、`在看 用户名`、`想看 用户名`、`看过 用户名`、`收藏 用户名` 等查询。用户名不是昵称。
 
-```javascript
-// 在自定义宿主中由安全存储注入；这里的 token 变量需由调用者提供。
-Bangumi.configure({
-    username: 'your-bgm-username',
-    accessToken: token,
-    userAgent: 'your-developer-id/ShiroxBangumi/0.1.0 (private module)'
-});
+Token 由自定义宿主在本机通过 `Bangumi.configure({ accessToken: token })` 注入，默认留空。不要将个人 Token 写入公开脚本；本版本没有账号登录界面或自动追番同步。
 
-await Bangumi.getMe();
-await Bangumi.getCollections('your-bgm-username', { type: 3, limit: 50, offset: 0 });
-await Bangumi.getCollection('your-bgm-username', 400602);
+## 自定义托管
 
-// 只修改明确传入的字段，保留未传入的评分、评论、标签、私密状态。
-await Bangumi.setCollection(400602, { type: 3 });
-await Bangumi.setCollection(400602, { rate: 8 });
-
-// 从 API 返回值中取得真实章节 ID；不能用“第 1 集”的数字 1 代替章节 ID。
-var eps = await Bangumi.getEpisodes(400602);
-var first = eps.find(function (ep) { return ep.sort === 1; });
-if (first) await Bangumi.setEpisodeState(400602, [first.id], 2);
-```
-
-以上带 `set` 的示例会修改账号数据，只在用户明确触发操作时调用。交付和测试阶段未登录任何账号，也未向真实账号写入收藏、评分或进度。
-
-收藏状态：`1` 想看、`2` 看过、`3` 在看、`4` 搁置、`5` 抛弃。
-
-章节状态：`0` 未收藏、`1` 想看、`2` 看过、`3` 抛弃。
-
-`setEpisodeState` 每次接受 1–100 个章节 ID，去重并验证它们属于该条目的正片，再调用官方 PATCH API。它不猜测你已看完前几集，也不会自动批量标记前面的集数。官方 API 会重算条目完成度；动画不能通过 `ep_status` 直接修改进度。
-
-Token 可由你在本机的 https://next.bgm.tv/demo/access-token 创建。**不要把 Token 发到聊天或放进公开托管的 JS**；脚本中的 Token 会随导出、备份而暴露。本模块默认 Token 留空，日常公开查询不需要 Token。原生集成应把它放在 Keychain，按当前 Shirox 个人资料隔离，并仅向 `api.bgm.tv` 注入。
-
-## 自定义托管地址
-
-默认 `bangumi.json` 的 `scriptUrl` 已指向本仓库 `main` 分支的 `bangumi.js` 完整 HTTPS 地址；仓库公开后可直接使用上面的 GitHub 安装链接。从文件导入仍可选择本机的 JS 文件。
-
-在有 Node.js 18+ 的电脑上，将目录 URL 换成你实际控制的 HTTPS 托管目录：
+需要托管到自己的 HTTPS 目录时：
 
 ```bash
 npm run package -- https://your-host.example/shirox-bangumi/
 ```
 
-将生成的 `dist/bangumi.json`、`dist/bangumi.js` 放到该目录，再在 Shirox 中导入对应的 `bangumi.json` HTTPS 地址。打包器会检查本地配置，拒绝把含 Token 或用户名的脚本打成公开版本。
+上传生成的 `dist/bangumi.json` 和 `dist/bangumi.js`。打包器会改写脚本地址，并拒绝打包配置了用户名或 Token 的脚本。示例域名不是可用地址。
 
-保留私有仓库时，应将打包后的两个文件放到可匿名访问的 HTTPS 地址。上面的示例域名不是可用安装链接。
-
-## 验证
+## 验证与范围
 
 无需安装依赖：
 
 ```bash
 npm test
 npm run test:live
-node test/live.cjs your-public-username
 ```
 
-离线测试覆盖搜索契约、动画筛选、别名、剧集分页与排序、重复分页、错误提示、Token 错误信息脱敏、收藏字段校验，以及章节 ID 校验后的写入请求。写入测试使用假 Token 和模拟网络。
+30 项离线测试覆盖元数据字段、评分量纲、日期与缺失值、两种剧集编号、搜索摘要、兼容入口、分页、错误处理及模拟写入。联网测试只读取公开 API，验证《葬送的芙莉莲》及其 28 集正片的结构化元数据。
 
-联网测试只调用搜索、详情、剧集及可选的公开收藏查询。2026-10-29 实测《葬送的芙莉莲》条目 `400602`：搜索成功、首播日期正确、正片列表 28 集。
-
-验证范围：Node VM 中的 Shirox `fetchv2` 接口模拟及真实 Bangumi HTTP API。**未在 iPhone/macOS 的 Shirox 客户端或 JavaScriptCore 中实测；未验证真实 Token 的写入权限。**
-
-## 原生自动同步的接入边界
-
-若要真正实现“播放后自动同步到 bgm.tv”，还需修改宿主：
-
-- 用 Keychain 和个人资料隔离实现 Token 登录、退出与账号状态。
-- 建立 AniList/MAL/播放源条目与 Bangumi subject ID 的人工可确认映射，避免同名作品或不同季度误配。
-- 接入实际的完成观看事件，使用明确的 Bangumi episode ID 写入；不能在解析播放链接或预加载时写入。
-- 将收藏及进度读取接入资料库，处理离线队列、失败重试、重新观看和冲突。当前模块不会冒充这些功能已经完成。
+验证环境为 Node VM、模拟的 Shirox 网络桥和真实 Bangumi API；没有在 iPhone/macOS Shirox 客户端内运行，也没有修改 Shirox 的原生 Provider。
 
 ## 接口依据
 
-- [Shirox 模块模型](https://github.com/xibrox/Shirox/blob/398d36715b34a17ec68bfd52d792f7a2e7db06f5/Shirox/Models/ModuleDefinition.swift)
-- [Shirox 文件导入](https://github.com/xibrox/Shirox/blob/398d36715b34a17ec68bfd52d792f7a2e7db06f5/Shirox/Views/ModuleImportView.swift)
-- [Shirox 模块检测](https://github.com/xibrox/Shirox/blob/398d36715b34a17ec68bfd52d792f7a2e7db06f5/Shirox/Services/ModuleCheck.swift)
-- [Shirox 追踪服务类型](https://github.com/xibrox/Shirox/blob/398d36715b34a17ec68bfd52d792f7a2e7db06f5/Shirox/Models/Media.swift)
 - [Bangumi v0 OpenAPI](https://github.com/bangumi/api/blob/master/open-api/v0.yaml)
 - [Bangumi User-Agent 要求](https://github.com/bangumi/api/blob/master/docs-raw/user%20agent.md)
+- [Shirox 模块详情解析器](https://github.com/xibrox/Shirox/blob/398d36715b34a17ec68bfd52d792f7a2e7db06f5/Shirox/Services/JSEngine%2BDetails.swift)
+- [Shirox 原生 MediaProvider](https://github.com/xibrox/Shirox/blob/398d36715b34a17ec68bfd52d792f7a2e7db06f5/Shirox/Protocols/MediaProvider.swift)
