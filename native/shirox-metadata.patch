@@ -1,7 +1,8 @@
 diff --git a/.gitignore b/.gitignore
+index 79d588f..32d48e2 100644
 --- a/.gitignore
 +++ b/.gitignore
-@@ -44,6 +44,7 @@
+@@ -44,6 +44,7 @@ Configurations/Shirox.local.xcconfig
  .claude/
  .gemini/
  docs/*
@@ -10,9 +11,20 @@ diff --git a/.gitignore b/.gitignore
  !docs/screenshots
  conductor/
 diff --git a/README.md b/README.md
+index 45b6643..7e84f7d 100644
 --- a/README.md
 +++ b/README.md
-@@ -110,6 +110,11 @@
+@@ -1,3 +1,9 @@
++> **内置 Bangumi 动画元数据**：此 Fork 将 Bangumi 随 App 打包，接入首页、搜索和动画详情。它与 AniList、MyAnimeList 一起出现在来源列表中，无需导入模块 URL 或下载脚本。
++>
++> [构建、安装与验证记录](docs/BANGUMI.md) · [Bangumi 模块仓库](https://github.com/quiteQa/shirox-bangumi)
++>
++> 安装含内置资源的修改版后，在模块页或首页来源菜单直接选择 **Bangumi**。公开元数据无需登录；读取内容仍需连接 bgm.tv。下方保留的上游安装链接指向官方版本。
++
+ <div align="center">
+ 
+ # 白 Shirox
+@@ -110,6 +116,11 @@ wider grids, and full-screen playback.
  
  ## Modules
  
@@ -24,694 +36,11 @@ diff --git a/README.md b/README.md
  Modules are small JSON manifests pointing at a JavaScript file that knows how to search a site and
  resolve streams or chapters. Add one under **Settings → Modules** by pasting its manifest URL.
  
-diff --git a/Shirox/Models/ModuleDefinition.swift b/Shirox/Models/ModuleDefinition.swift
---- a/Shirox/Models/ModuleDefinition.swift
-+++ b/Shirox/Models/ModuleDefinition.swift
-@@ -35,6 +35,8 @@
-     var isLocalPlayback: Bool { supportsLocalPlayback == true }
-     var isJellyfin: Bool { supportsJellyfin == true }
-     var isManga: Bool { type == "mangas" || type == "manga" }
-+    var isMetadata: Bool { type == "metadata" }
-+    var isAnimePlayback: Bool { !isManga && !isMetadata }
- 
-     /// The source site's page for a title, from the `href` this module gave it — for opening in a
-     /// browser. Relative paths (`/anime/1`, `anime/1`) resolve against `baseUrl`; bare ids
-diff --git a/Shirox/Models/Media.swift b/Shirox/Models/Media.swift
---- a/Shirox/Models/Media.swift
-+++ b/Shirox/Models/Media.swift
-@@ -56,6 +56,8 @@
-     var tvdbID: Int?
-     /// A Simkl show's or movie's TMDB record, for a logo TVDB doesn't have.
-     var tmdbID: Int?
-+    /// Namespaced metadata identity; never passed to AniList/MAL tracking or TVDB.
-+    var moduleMetadata: ModuleMetadataIdentity?
- 
-     var uniqueId: String {
-         // A Simkl show or movie is keyed by Simkl id, and "simkl-52991" is already a Simkl anime
-diff --git a/Shirox/Services/ModuleJSRunner.swift b/Shirox/Services/ModuleJSRunner.swift
---- a/Shirox/Services/ModuleJSRunner.swift
-+++ b/Shirox/Services/ModuleJSRunner.swift
-@@ -147,6 +147,13 @@
-         return StreamProbe.checks(module?.ext?.kind) ? await StreamProbe.playable(streams) : streams
-     }
- 
-+    /// Structured metadata calls have no access to the shared playback runner.
-+    func readMetadata<T: Decodable>(_ function: String, args: [Any]) async throws -> T {
-+        let json = try await callAsyncJS(function, args: args)
-+        guard let data = json.data(using: .utf8) else { throw ProviderError.unsupported }
-+        return try JSONDecoder().decode(T.self, from: data)
-+    }
-+
-     // MARK: - Promise resolution
- 
-     private func callAsyncJS(_ functionName: String, args: [Any]) async throws -> String {
-diff --git a/Shirox/Services/DiscoverySource.swift b/Shirox/Services/DiscoverySource.swift
---- a/Shirox/Services/DiscoverySource.swift
-+++ b/Shirox/Services/DiscoverySource.swift
-@@ -13,8 +13,9 @@
-     // Nonisolated: the settings backup lists them outside the main actor.
-     nonisolated static let choiceKey = "discoverySource"
-     nonisolated static let kindKey = "simklDiscoverKind"
-+    nonisolated static let metadataKey = "metadataModuleID"
- 
--    enum Choice: String { case providers, simkl }
-+    enum Choice: String { case providers, simkl, metadata }
- 
-     @Published private(set) var choice: Choice
-     /// Home's and Search's Anime / Shows / Movies pills.
-@@ -23,7 +24,18 @@
-     }
-     /// Simkl chosen, and signed in to it. Signing out falls back to the chain by itself.
-     @Published private(set) var usesSimkl = false
-+    @Published private(set) var usesMetadata = false
-+    @Published private(set) var metadataModuleID: String?
- 
-+    var metadataModule: ModuleDefinition? {
-+        ModuleManager.shared.modules.first { $0.id == metadataModuleID && $0.isMetadata }
-+    }
-+
-+    var sourceID: String {
-+        if usesMetadata { return "metadata-\(metadataModuleID ?? "")" }
-+        return usesSimkl ? "simkl-\(simklKind.rawValue)" : "providers"
-+    }
-+
-     private let defaults: UserDefaults
-     private let selectProvider: @MainActor (ProviderType) -> Void
-     private var signedIn = false
-@@ -35,6 +47,7 @@
-         self.defaults = defaults
-         self.selectProvider = selectProvider
-         choice = Choice(rawValue: defaults.string(forKey: Self.choiceKey) ?? "") ?? .providers
-+        metadataModuleID = defaults.string(forKey: Self.metadataKey)
-         let stored = MediaKind(rawValue: defaults.string(forKey: Self.kindKey) ?? "")
-         simklKind = stored.flatMap { MediaKind.simklKinds.contains($0) ? $0 : nil } ?? .anime
-         (signedIn ?? SimklAuthManager.shared.$isLoggedIn.eraseToAnyPublisher())
-@@ -43,12 +56,27 @@
-                 self?.update()
-             }
-             .store(in: &cancellables)
-+        ModuleManager.shared.$modules
-+            .dropFirst()
-+            .sink { [weak self] _ in
-+                // @Published emits before the array is assigned.
-+                Task { @MainActor [weak self] in self?.update() }
-+            }
-+            .store(in: &cancellables)
-+        update()
-     }
- 
-     func chooseSimkl() {
-         set(.simkl)
-     }
- 
-+    func chooseMetadataModule(_ module: ModuleDefinition) {
-+        guard module.isMetadata else { return }
-+        metadataModuleID = module.id
-+        defaults.set(module.id, forKey: Self.metadataKey)
-+        set(.metadata)
-+    }
-+
-     /// Back to the chain, with `type` first in it.
-     func chooseProvider(_ type: ProviderType) {
-         set(.providers)
-@@ -64,6 +92,7 @@
-     /// After a profile switch: what the new profile saved, and nothing of the last one's.
-     func reloadForProfileSwitch() {
-         choice = Choice(rawValue: defaults.string(forKey: Self.choiceKey) ?? "") ?? .providers
-+        metadataModuleID = defaults.string(forKey: Self.metadataKey)
-         let stored = MediaKind(rawValue: defaults.string(forKey: Self.kindKey) ?? "")
-         simklKind = stored.flatMap { MediaKind.simklKinds.contains($0) ? $0 : nil } ?? .anime
-         update()
-@@ -72,5 +101,7 @@
-     private func update() {
-         let value = choice == .simkl && signedIn
-         if usesSimkl != value { usesSimkl = value }
-+        let metadata = choice == .metadata && metadataModule != nil
-+        if usesMetadata != metadata { usesMetadata = metadata }
-     }
- }
-diff --git a/Shirox/Services/BackupSections.swift b/Shirox/Services/BackupSections.swift
---- a/Shirox/Services/BackupSections.swift
-+++ b/Shirox/Services/BackupSections.swift
-@@ -165,7 +165,7 @@
-     static let stringKeys = [
-         "librarySortOrder", "libraryStatusOrder", "mangaReadingMode",
-         "preferredQuality", "titleLanguagePriority", SyncTargets.key,
--        DiscoverySource.choiceKey, DiscoverySource.kindKey, "playerHoldAction",
-+        DiscoverySource.choiceKey, DiscoverySource.kindKey, DiscoverySource.metadataKey, "playerHoldAction",
-         AppTint.key, AppColorScheme.key, AppTab.orderKey, AppTab.hiddenKey, AppTab.launchKey,
-         PullToRefreshStyle.key, "discordApplicationID"
-     ]
-diff --git a/Shirox/Services/ModuleManager.swift b/Shirox/Services/ModuleManager.swift
---- a/Shirox/Services/ModuleManager.swift
-+++ b/Shirox/Services/ModuleManager.swift
-@@ -7,8 +7,8 @@
- /// module, else nil.
- enum AnimeModulePreference {
-     static func pick(active: ModuleDefinition?, modules: [ModuleDefinition]) -> ModuleDefinition? {
--        if let active, active.isManga == false { return active }
--        return modules.first { $0.isManga == false }
-+        if let active, active.isAnimePlayback { return active }
-+        return modules.first { $0.isAnimePlayback }
-     }
- }
- 
-@@ -150,7 +150,7 @@
-             checkResults.removeValue(forKey: module.id)
- 
-             // Auto-select if it's the first module
--            if activeModule == nil {
-+            if activeModule == nil || module.isMetadata {
-                 selectModule(module)
-             }
-         } catch {
-@@ -185,7 +185,7 @@
-         lastAddedModuleID = module.id
-         checkResults.removeValue(forKey: module.id)
-         persistCheckResults()
--        if activeModule == nil { selectModule(module) }
-+        if activeModule == nil || module.isMetadata { selectModule(module) }
-     }
- 
-     /// Puts back a module a backup carried whole: one from files, or one with an edited script.
-@@ -298,6 +298,11 @@
-     // MARK: - Select Module
- 
-     func selectModule(_ module: ModuleDefinition) {
-+        if module.isMetadata {
-+            if activeModule?.id == module.id { deselectModule() }
-+            DiscoverySource.shared.chooseMetadataModule(module)
-+            return
-+        }
-         activeModule = module
-         UserDefaults.standard.set(module.id, forKey: activeKey)
-         
-@@ -315,6 +320,7 @@
-     /// Returns false when the script failed to load. Used by flows that must
-     /// call into the module immediately after switching (Continue Reading).
-     func selectAndAwaitReady(_ module: ModuleDefinition) async -> Bool {
-+        guard !module.isMetadata else { return false }
-         activeModule = module
-         UserDefaults.standard.set(module.id, forKey: activeKey)
-         do {
-@@ -424,10 +430,14 @@
- 
-             let wasActive = activeModule?.id == modules[i].id
-             modules[i] = fresh
-+            if fresh.isMetadata { checkResults.removeValue(forKey: fresh.id) }
-             if wasActive { selectModule(fresh) }
-             didUpdate = true
-         }
--        if didUpdate { saveToStorage() }
-+        if didUpdate {
-+            saveToStorage()
-+            persistCheckResults()
-+        }
-     }
- 
-     // MARK: - Asset Caching
-diff --git a/Shirox/Services/JSEngine.swift b/Shirox/Services/JSEngine.swift
---- a/Shirox/Services/JSEngine.swift
-+++ b/Shirox/Services/JSEngine.swift
-@@ -40,6 +40,7 @@
-     // MARK: - Module Loading
- 
-     func loadModule(_ module: ModuleDefinition) async throws {
-+        guard !module.isMetadata else { throw ProviderError.unsupported }
-         // Clear cookies so the previous module's session doesn't bleed into this one
-         HTTPCookieStorage.shared.cookies?.forEach { HTTPCookieStorage.shared.deleteCookie($0) }
-         NetworkFetchManager.clearCookies()
-diff --git a/Shirox/Services/ModuleCheck.swift b/Shirox/Services/ModuleCheck.swift
---- a/Shirox/Services/ModuleCheck.swift
-+++ b/Shirox/Services/ModuleCheck.swift
-@@ -20,7 +20,7 @@
- }
- 
- enum ModuleCheckStep: String, Codable {
--    case load, search, episodes, streams
-+    case load, search, episodes, streams, metadata
- 
-     var label: String {
-         switch self {
-@@ -28,6 +28,7 @@
-         case .search: return String(localized: "common.search")
-         case .episodes: return String(localized: "common.episodes")
-         case .streams: return String(localized: "modules.streams")
-+        case .metadata: return String(localized: "modules.metadata_source")
-         }
-     }
- }
-@@ -49,6 +50,9 @@
-             group.addTask { await run(module) }
-             group.addTask {
-                 try? await Task.sleep(nanoseconds: UInt64(timeout * 1_000_000_000))
-+                if module.isMetadata {
-+                    return .failed(step: .metadata, reason: String(localized: "modules.metadata_timed_out"))
-+                }
-                 return .failed(step: .streams, reason: String(localized: "modules.didnt_reach_a_stream_in \(Int(timeout))"))
-             }
-             let first = await group.next() ?? .failed(step: .load, reason: String(localized: "modules.didnt_run"))
-@@ -58,6 +62,19 @@
-     }
- 
-     private static func run(_ module: ModuleDefinition) async -> ModuleCheckResult {
-+        if module.isMetadata {
-+            do {
-+                let service = ModuleMetadataService(module: module)
-+                let results = try await service.search(queries[0])
-+                guard let first = results.first else {
-+                    return .failed(step: .search, reason: String(localized: "modules.metadata_empty"))
-+                }
-+                _ = try await service.detail(id: first.id)
-+                return .passed
-+            } catch {
-+                return .failed(step: .metadata, reason: error.localizedDescription)
-+            }
-+        }
-         let runner = ModuleJSRunner()
-         do {
-             try await runner.load(module: module)
-diff --git a/Shirox/ViewModels/HomeViewModel.swift b/Shirox/ViewModels/HomeViewModel.swift
---- a/Shirox/ViewModels/HomeViewModel.swift
-+++ b/Shirox/ViewModels/HomeViewModel.swift
-@@ -15,6 +15,8 @@
-     @Published private(set) var feedProvider: ProviderType?
- 
-     private var loaded = false
-+    private var loadedSourceID: String?
-+    private var generation = UUID()
-     private var cancellables = Set<AnyCancellable>()
- 
-     init() {
-@@ -35,23 +37,43 @@
-     }
- 
-     func load() async {
--        guard !loaded else { return }
-+        let sourceID = DiscoverySource.shared.sourceID
-+        guard !loaded || loadedSourceID != sourceID else { return }
-+        let requestID = UUID()
-+        generation = requestID
-         isLoading = true
-         error = nil
-+        if let loadedSourceID, loadedSourceID != sourceID {
-+            apply(HomeFeed(trending: [], seasonal: [], lastSeason: [], popular: [], topRated: []), from: nil)
-+        }
- 
-         do {
-+            if let module = DiscoverySource.shared.metadataModule, DiscoverySource.shared.usesMetadata {
-+                let service = ModuleMetadataService(module: module)
-+                let ranked = try await service.browse(.topRated)
-+                let newest = try await service.browse(.newest)
-+                guard generation == requestID, DiscoverySource.shared.sourceID == sourceID else { return }
-+                apply(HomeFeed(trending: ranked, seasonal: newest, lastSeason: [], popular: [], topRated: ranked), from: nil)
-+                loaded = true
-+                loadedSourceID = sourceID
-+                isLoading = false
-+                return
-+            }
-             // One call, not five. Each provider decides how few requests that actually takes
-             // (AniList: a single aliased GraphQL query; MAL: five, paced). Going through
-             // `call` once also means the whole screen comes from one provider — five separate
-             // calls could each fall back independently and leave Home showing a mix.
-             let feed = try await ProviderManager.shared.call { try await $0.homeFeed() }
-+            guard generation == requestID, DiscoverySource.shared.sourceID == sourceID else { return }
-             let type = ProviderManager.shared.primary?.providerType
-             apply(feed, from: type)
-             if let type {
-                 HomeCacheStore.shared.save(feed: feed, provider: type)
-             }
-             loaded = true
-+            loadedSourceID = sourceID
-         } catch {
-+            guard generation == requestID, DiscoverySource.shared.sourceID == sourceID else { return }
-             self.error = error.localizedDescription
-             // A reload that fails (e.g. right after switching providers) leaves whatever is on
-             // screen untouched — nothing above clears it on failure, by design, so a background
-@@ -83,6 +105,10 @@
-     // MARK: - Private
- 
-     private func seedFromCache() {
-+        if DiscoverySource.shared.usesMetadata {
-+            apply(HomeFeed(trending: [], seasonal: [], lastSeason: [], popular: [], topRated: []), from: nil)
-+            return
-+        }
-         guard let type = ProviderManager.shared.primary?.providerType,
-               let cached = HomeCacheStore.shared.snapshot(provider: type) else { return }
-         apply(cached.feed, from: type)
-diff --git a/Shirox/Views/HomeView.swift b/Shirox/Views/HomeView.swift
---- a/Shirox/Views/HomeView.swift
-+++ b/Shirox/Views/HomeView.swift
-@@ -66,7 +66,7 @@
- 
-     /// Which Home is showing — the chain's, or Simkl's for one kind. A change reloads.
-     private var homeSourceID: String {
--        discovery.usesSimkl ? "simkl-\(discovery.simklKind.rawValue)" : "providers"
-+        discovery.sourceID
-     }
- 
-     /// The hero's titles, from whichever source Home is showing.
-@@ -87,6 +87,7 @@
-     /// provider menu lists them, then Simkl's Anime, Shows and Movies as its kind menu does. Nil
-     /// until there's a page.
-     private var pagePosition: Int? {
-+        if discovery.usesMetadata { return ProviderType.userProviders.count + MediaKind.simklKinds.count }
-         if discovery.usesSimkl {
-             guard let kind = simkl.layout?.kind, let index = MediaKind.simklKinds.firstIndex(of: kind) else { return nil }
-             return ProviderType.userProviders.count + index
-@@ -137,7 +138,18 @@
-             // Like the hero: the leaving and arriving rows overlap while they turn.
-             ZStack(alignment: .topLeading) {
-                 VStack(alignment: .leading, spacing: 24) {
--                    if discovery.usesSimkl {
-+                    if discovery.usesMetadata {
-+                        if !vm.topRated.isEmpty {
-+                            AnimeSection(title: ModuleMetadataCatalog.topRated.title, items: vm.topRated) {
-+                                MetadataCatalogView(catalog: .topRated)
-+                            }
-+                        }
-+                        if !vm.seasonal.isEmpty {
-+                            AnimeSection(title: ModuleMetadataCatalog.newest.title, items: vm.seasonal) {
-+                                MetadataCatalogView(catalog: .newest)
-+                            }
-+                        }
-+                    } else if discovery.usesSimkl {
-                         ForEach(simkl.layout?.rows ?? []) { row in
-                             AnimeSection(title: row.title, items: row.items) {
-                                 SimklListView(list: row.list)
-diff --git a/Shirox/ViewModels/SearchViewModel.swift b/Shirox/ViewModels/SearchViewModel.swift
---- a/Shirox/ViewModels/SearchViewModel.swift
-+++ b/Shirox/ViewModels/SearchViewModel.swift
-@@ -30,6 +30,14 @@
-             .dropFirst()
-             .sink { [weak self] _ in self?.clearResults() }
-             .store(in: &cancellables)
-+        DiscoverySource.shared.$metadataModuleID
-+            .dropFirst()
-+            .sink { [weak self] _ in self?.clearResults() }
-+            .store(in: &cancellables)
-+        DiscoverySource.shared.$usesMetadata
-+            .dropFirst()
-+            .sink { [weak self] _ in self?.clearResults() }
-+            .store(in: &cancellables)
-     }
- 
-     func search(usingModule: Bool) {
-@@ -46,7 +54,13 @@
-         simklFailedKinds = []
-         searchTask = Task {
-             do {
--                if usingModule {
-+                if let module = DiscoverySource.shared.metadataModule, DiscoverySource.shared.usesMetadata {
-+                    let service = ModuleMetadataService(module: module)
-+                    let result = try await service.search(q)
-+                    if !Task.isCancelled {
-+                        aniListResults = result.map { $0.media(moduleID: module.id) }
-+                    }
-+                } else if usingModule {
-                     CloudflareBypassManager.shared.pendingVerificationURL = nil
-                     var res: [SearchItem]
-                     do {
-diff --git a/Shirox/Views/SearchView.swift b/Shirox/Views/SearchView.swift
---- a/Shirox/Views/SearchView.swift
-+++ b/Shirox/Views/SearchView.swift
-@@ -30,7 +30,7 @@
-     @State private var pendingVideoURL: URL?
-     @State private var pendingVideoTitle: String?
- 
--    private var isLocalModule: Bool { moduleManager.activeModule?.isLocalPlayback == true }
-+    private var isLocalModule: Bool { !discovery.usesMetadata && moduleManager.activeModule?.isLocalPlayback == true }
- 
-     private var usesToolbarSearch: Bool {
-         #if os(macOS)
-@@ -39,7 +39,7 @@
-         false
-         #endif
-     }
--    private var isJellyfinModule: Bool { moduleManager.activeModule?.isJellyfin == true }
-+    private var isJellyfinModule: Bool { !discovery.usesMetadata && moduleManager.activeModule?.isJellyfin == true }
- 
-     private var platformBackground: Color {
-         #if os(iOS)
-@@ -68,7 +68,7 @@
-         #endif
-     }
- 
--    private var usingModule: Bool { moduleManager.activeModule != nil }
-+    private var usingModule: Bool { !discovery.usesMetadata && moduleManager.activeModule != nil }
-     private var primaryProvider: ProviderType { providerManager.orderedProviders.first?.providerType ?? .anilist }
-     /// What Search draws on without a module: Simkl when chosen, else the chain's first.
-     private var shownProvider: ProviderType { discovery.usesSimkl ? .simkl : primaryProvider }
-@@ -110,7 +110,7 @@
-                     }
-                 }
-                 .onChangeOf(moduleManager.moduleReadyId) { newId in
--                    guard !vm.query.isEmpty, newId != nil else { return }
-+                    guard !discovery.usesMetadata, !vm.query.isEmpty, newId != nil else { return }
-                     vm.search(usingModule: true)
-                 }
-                 .onChangeOf(moduleManager.activeModule) { newModule in
-@@ -125,6 +125,10 @@
-                     guard !vm.query.isEmpty, !usingModule else { return }
-                     vm.search(usingModule: false)
-                 }
-+                .onChangeOf(discovery.sourceID) { _ in
-+                    guard !vm.query.isEmpty else { return }
-+                    vm.search(usingModule: usingModule)
-+                }
-         }
-         .adaptiveSheet(isPresented: $showModuleList) {
-             NavigationStack {
-@@ -164,7 +168,9 @@
-                 // Nothing typed yet: give people somewhere to go, with any recent searches
-                 // carried along at the top. Recents used to be a full-height list of their own,
-                 // which meant one previous search hid browsing entirely.
--                if discovery.usesSimkl {
-+                if discovery.usesMetadata {
-+                    MetadataCatalogView(catalog: .topRated)
-+                } else if discovery.usesSimkl {
-                     SimklBrowseView(
-                         columns: columns,
-                         recentSearches: history.queries,
-@@ -365,7 +371,7 @@
-                 if !vm.aniListResults.isEmpty {
-                     ForEach(vm.aniListResults) { media in
-                         NavigationLink {
--                            AniListDetailView(mediaId: media.id, preloadedMedia: media)
-+                            MediaDestination(media: media)
-                         } label: {
-                             AniListCardView(media: media)
-                         }
-@@ -528,7 +534,9 @@
-             HStack(spacing: 6) {
-                 // Icon container (rounded)
-                 Group {
--                    if usingModule {
-+                    if discovery.usesMetadata {
-+                        fallbackIcon
-+                    } else if usingModule {
-                         if let iconUrlString = moduleManager.activeModule?.iconUrl, !iconUrlString.isEmpty {
-                             CachedAsyncImage(urlString: iconUrlString)
-                         } else {
-@@ -549,7 +557,9 @@
- 
-                 // Text label
-                 if buttonStyle != .iconOnly {
--                    Text(usingModule ? (moduleManager.activeModule?.sourceName ?? String(localized: "modules.module")) : shownProvider.displayName)
-+                    Text(discovery.usesMetadata
-+                         ? (discovery.metadataModule?.sourceName ?? String(localized: "modules.metadata_source"))
-+                         : usingModule ? (moduleManager.activeModule?.sourceName ?? String(localized: "modules.module")) : shownProvider.displayName)
-                         .font(.callout)
-                         .fontWeight(.medium)
-                         // A toolbar item takes whatever width it asks for, so a long module name
-diff --git a/Shirox/Views/Shared/MediaDestination.swift b/Shirox/Views/Shared/MediaDestination.swift
---- a/Shirox/Views/Shared/MediaDestination.swift
-+++ b/Shirox/Views/Shared/MediaDestination.swift
-@@ -5,17 +5,21 @@
-     let media: Media
- 
-     enum Target: Equatable {
-+        case metadata(ModuleMetadataIdentity)
-         case simklTitle(simklID: Int, kind: MediaKind)
-         case anime(id: Int)
-     }
- 
-     static func target(for media: Media) -> Target {
-+        if let identity = media.moduleMetadata { return .metadata(identity) }
-         if let kind = media.simklTitleKind { return .simklTitle(simklID: media.id, kind: kind) }
-         return .anime(id: media.id)
-     }
- 
-     var body: some View {
-         switch Self.target(for: media) {
-+        case .metadata(let identity):
-+            MetadataDetailView(identity: identity, seed: media)
-         case .simklTitle(let simklID, let kind):
-             SimklTitlePage(simklID: simklID, kind: kind, seedTitle: media.title.displayTitle,
-                            seedPosterURL: media.coverImage.large)
-diff --git a/Shirox/Views/ModuleListView.swift b/Shirox/Views/ModuleListView.swift
---- a/Shirox/Views/ModuleListView.swift
-+++ b/Shirox/Views/ModuleListView.swift
-@@ -522,7 +522,7 @@
-         // Simkl is the Home and Search source beside the AniList/MAL chain, not a link in it.
-         let isChosen = type == .simkl
-             ? discovery.usesSimkl
--            : !discovery.usesSimkl && providerManager.orderedProviders.first?.providerType == type
-+            : !discovery.usesSimkl && !discovery.usesMetadata && providerManager.orderedProviders.first?.providerType == type
-         let isSelected = moduleManager.activeModule == nil
-         let isDown = isChosen && type != .simkl && providerManager.fallbackActive
- 
-@@ -600,7 +600,9 @@
- 
-     // MARK: - Module Row
-     private func moduleRow(_ module: ModuleDefinition) -> some View {
--        let isActive = moduleManager.activeModule?.id == module.id
-+        let isActive = module.isMetadata
-+            ? discovery.usesMetadata && discovery.metadataModuleID == module.id
-+            : moduleManager.activeModule?.id == module.id
-         return Button {
-             if !isActive {
-                 moduleManager.selectModule(module)
-@@ -621,6 +623,9 @@
-                     Text(module.sourceName).font(.headline)
-                     HStack(spacing: 6) {
-                         Text("v\(module.version)").font(.caption).foregroundStyle(.secondary)
-+                        if module.isMetadata {
-+                            Text("modules.metadata_source").font(.caption).foregroundStyle(.secondary)
-+                        }
-                         if let author = module.author, !author.name.isEmpty {
-                             Text("·").font(.caption).foregroundStyle(.secondary)
-                             Text(author.name).font(.caption).foregroundStyle(.secondary)
-diff --git a/Shirox/Views/ModuleImportView.swift b/Shirox/Views/ModuleImportView.swift
---- a/Shirox/Views/ModuleImportView.swift
-+++ b/Shirox/Views/ModuleImportView.swift
-@@ -128,6 +128,7 @@
-                 Picker("settings.type", selection: $kind) {
-                     Text("common.anime").tag("anime")
-                     Text("common.manga").tag("manga")
-+                    Text("modules.metadata_source").tag("metadata")
-                 }
-                 TextField("modules.language_e_g_english", text: $language)
-                 urlField(String(localized: "modules.website"), text: $baseUrl)
-@@ -279,7 +280,7 @@
-         authorIcon = module.author?.icon ?? ""
-         iconURL = module.iconUrl ?? ""
-         if let data = module.iconData.flatMap({ Data(base64Encoded: $0) }) { iconData = data }
--        kind = module.isManga ? "manga" : "anime"
-+        kind = module.isMetadata ? "metadata" : module.isManga ? "manga" : "anime"
-         language = module.language ?? ""
-         baseUrl = module.baseUrl ?? ""
-         searchBaseUrl = module.searchBaseUrl ?? ""
-diff --git a/Shirox/Views/Downloads/DownloadModulePickerView.swift b/Shirox/Views/Downloads/DownloadModulePickerView.swift
---- a/Shirox/Views/Downloads/DownloadModulePickerView.swift
-+++ b/Shirox/Views/Downloads/DownloadModulePickerView.swift
-@@ -40,7 +40,7 @@
-     var body: some View {
-         NavigationStack {
-             ModulePickerRows {
--                ForEach(moduleManager.modules) { module in
-+                ForEach(moduleManager.modules.filter { !$0.isMetadata }) { module in
-                     DownloadModuleRow(
-                         module: module,
-                         mediaId: mediaId,
-diff --git a/Shirox/Views/Downloads/BatchDownloadModulePickerView.swift b/Shirox/Views/Downloads/BatchDownloadModulePickerView.swift
---- a/Shirox/Views/Downloads/BatchDownloadModulePickerView.swift
-+++ b/Shirox/Views/Downloads/BatchDownloadModulePickerView.swift
-@@ -25,7 +25,7 @@
-     var body: some View {
-         NavigationStack {
-             ModulePickerRows {
--                ForEach(moduleManager.modules) { module in
-+                ForEach(moduleManager.modules.filter { !$0.isMetadata }) { module in
-                     BatchDownloadModuleRow(
-                         module: module,
-                         mediaId: mediaId,
-diff --git a/Shirox/Views/ModuleStreamPickerView.swift b/Shirox/Views/ModuleStreamPickerView.swift
---- a/Shirox/Views/ModuleStreamPickerView.swift
-+++ b/Shirox/Views/ModuleStreamPickerView.swift
-@@ -40,7 +40,7 @@
-         if useDefaultExtension, let active = moduleManager.activeModule {
-             return [active]
-         }
--        return moduleManager.modules
-+        return moduleManager.modules.filter { !$0.isMetadata }
-     }
- 
-     var body: some View {
-diff --git a/Shirox/Views/LibraryView.swift b/Shirox/Views/LibraryView.swift
---- a/Shirox/Views/LibraryView.swift
-+++ b/Shirox/Views/LibraryView.swift
-@@ -760,7 +760,9 @@
- 
-     @ViewBuilder
-     private func rowDestinationPage(_ entry: LibraryEntry) -> some View {
--        if let source = entry.localSource, source.kind == .module {
-+        if entry.media.moduleMetadata != nil {
-+            MediaDestination(media: entry.media)
-+        } else if let source = entry.localSource, source.kind == .module {
-             DetailView(
-                 item: SearchItem(
-                     title: entry.media.title.displayTitle,
-diff --git a/Shirox/Views/Shared/ProviderStatusBanner.swift b/Shirox/Views/Shared/ProviderStatusBanner.swift
---- a/Shirox/Views/Shared/ProviderStatusBanner.swift
-+++ b/Shirox/Views/Shared/ProviderStatusBanner.swift
-@@ -117,7 +117,12 @@
-     @ObservedObject private var manager = ProviderManager.shared
-     @ObservedObject private var discovery = DiscoverySource.shared
-     @ObservedObject private var simklAuth = SimklAuthManager.shared
-+    @ObservedObject private var modules = ModuleManager.shared
- 
-+    private var sourceName: String {
-+        discovery.usesMetadata ? (discovery.metadataModule?.sourceName ?? String(localized: "modules.metadata_source")) : shown.displayName
-+    }
-+
-     /// What Home and Search come from: Simkl when chosen, else the first of the chain.
-     private var shown: ProviderType {
-         discovery.usesSimkl ? .simkl : (manager.primary?.providerType ?? .anilist)
-@@ -182,10 +187,15 @@
-             if simklAuth.isLoggedIn {
-                 Button { discovery.chooseSimkl() } label: { label(.simkl) }
-             }
-+            ForEach(modules.modules.filter(\.isMetadata)) { module in
-+                Button { discovery.chooseMetadataModule(module) } label: { Text(module.sourceName) }
-+            }
-         } label: {
-             #if os(macOS)
--            let providerLabel = Label { Text(shown.displayName) } icon: {
--                cachedIcon(shown) ?? Image(icon: "sparkles.tv")
-+            let providerLabel = Label { Text(sourceName) } icon: {
-+                if discovery.usesMetadata { Image(icon: "puzzlepiece.extension") } else {
-+                    cachedIcon(shown) ?? Image(icon: "sparkles.tv")
-+                }
-             }
-             if style == .iconOnly {
-                 providerLabel.labelStyle(.iconOnly)
-@@ -194,12 +204,16 @@
-             }
-             #else
-             HStack(spacing: 6) {
--                CachedAsyncImage(urlString: shown.iconURL)
--                    .frame(width: 20, height: 20)
--                    .background(shown == .simkl ? Color.white : Color.clear)
--                    .clipShape(RoundedRectangle(cornerRadius: 5))
-+                if discovery.usesMetadata {
-+                    IconView("puzzlepiece.extension").frame(width: 20, height: 20)
-+                } else {
-+                    CachedAsyncImage(urlString: shown.iconURL)
-+                        .frame(width: 20, height: 20)
-+                        .background(shown == .simkl ? Color.white : Color.clear)
-+                        .clipShape(RoundedRectangle(cornerRadius: 5))
-+                }
-                 if style != .iconOnly {
--                    Text(shown.displayName)
-+                    Text(sourceName)
-                         .font(.subheadline.weight(.semibold))
-                 }
-                 IconView("chevron.down").font(.caption2)
 diff --git a/Shirox.xcodeproj/project.pbxproj b/Shirox.xcodeproj/project.pbxproj
+index f223914..8b7ffc6 100644
 --- a/Shirox.xcodeproj/project.pbxproj
 +++ b/Shirox.xcodeproj/project.pbxproj
-@@ -1227,6 +1227,19 @@
+@@ -1227,6 +1227,25 @@
  		FF17377B81BE09D95EFB573C /* MediaDestination.swift in Sources */ = {isa = PBXBuildFile; fileRef = F448D8EACA889534B3F509C6 /* MediaDestination.swift */; };
  		FF2F81D3615940308F608BD6 /* SubtitleRouting.swift in Sources */ = {isa = PBXBuildFile; fileRef = 881989087D5AEFEADB010420 /* SubtitleRouting.swift */; };
  		FFFEDFBBB37573B50961C268 /* ExtensionRepoLoader.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6D967E193B36DBB828CDEC9D /* ExtensionRepoLoader.swift */; };
@@ -728,10 +57,16 @@ diff --git a/Shirox.xcodeproj/project.pbxproj b/Shirox.xcodeproj/project.pbxproj
 +		FEEE0000000000000000000F /* MetadataCatalogView.swift in Sources */ = {isa = PBXBuildFile; fileRef = FEEE0000000000000000000D /* MetadataCatalogView.swift */; };
 +		FEEE00000000000000000010 /* MetadataCatalogView.swift in Sources */ = {isa = PBXBuildFile; fileRef = FEEE0000000000000000000D /* MetadataCatalogView.swift */; };
 +		FEEE00000000000000000012 /* MetadataModuleTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = FEEE00000000000000000011 /* MetadataModuleTests.swift */; };
++		BFEE00000000000000000002 /* Bangumi.js in Resources */ = {isa = PBXBuildFile; fileRef = BFEE00000000000000000001 /* Bangumi.js */; };
++		BFEE00000000000000000003 /* Bangumi.js in Resources */ = {isa = PBXBuildFile; fileRef = BFEE00000000000000000001 /* Bangumi.js */; };
++		BFEE00000000000000000004 /* Bangumi.js in Resources */ = {isa = PBXBuildFile; fileRef = BFEE00000000000000000001 /* Bangumi.js */; };
++		BFEE00000000000000000006 /* Bangumi.json in Resources */ = {isa = PBXBuildFile; fileRef = BFEE00000000000000000005 /* Bangumi.json */; };
++		BFEE00000000000000000007 /* Bangumi.json in Resources */ = {isa = PBXBuildFile; fileRef = BFEE00000000000000000005 /* Bangumi.json */; };
++		BFEE00000000000000000008 /* Bangumi.json in Resources */ = {isa = PBXBuildFile; fileRef = BFEE00000000000000000005 /* Bangumi.json */; };
  /* End PBXBuildFile section */
  
  /* Begin PBXContainerItemProxy section */
-@@ -1788,6 +1801,11 @@
+@@ -1788,6 +1807,13 @@
  		FE1AC518A4DC04950FDBEA96 /* DiscordSettingsView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = DiscordSettingsView.swift; sourceTree = "<group>"; };
  		FF4C00BAA407FF400B069044 /* JellyfinEntryView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = JellyfinEntryView.swift; sourceTree = "<group>"; };
  		FFFC46805FE79CD18D6269BA /* SimklOAuthTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = SimklOAuthTests.swift; sourceTree = "<group>"; };
@@ -740,10 +75,12 @@ diff --git a/Shirox.xcodeproj/project.pbxproj b/Shirox.xcodeproj/project.pbxproj
 +		FEEE00000000000000000009 /* MetadataDetailView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MetadataDetailView.swift; sourceTree = "<group>"; };
 +		FEEE0000000000000000000D /* MetadataCatalogView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MetadataCatalogView.swift; sourceTree = "<group>"; };
 +		FEEE00000000000000000011 /* MetadataModuleTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MetadataModuleTests.swift; sourceTree = "<group>"; };
++		BFEE00000000000000000001 /* Bangumi.js */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.javascript; path = Bangumi.js; sourceTree = "<group>"; };
++		BFEE00000000000000000005 /* Bangumi.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = Bangumi.json; sourceTree = "<group>"; };
  /* End PBXFileReference section */
  
  /* Begin PBXFrameworksBuildPhase section */
-@@ -1897,6 +1915,7 @@
+@@ -1897,6 +1923,7 @@
  				51CCA7446EA6D04AED7FAE2B /* SimklPlayRef.swift */,
  				85E1CEEE89708ED0E4455BCD /* SimklDiscover.swift */,
  				C0E6CAD08552A40849DB89CD /* AppProfile.swift */,
@@ -751,7 +88,7 @@ diff --git a/Shirox.xcodeproj/project.pbxproj b/Shirox.xcodeproj/project.pbxproj
  			);
  			path = Models;
  			sourceTree = "<group>";
-@@ -2063,6 +2082,7 @@
+@@ -2063,6 +2090,7 @@
  				3E73471E59E7AEA5DEF84E5E /* DiscordPresence.swift */,
  				5848EEB9B54A1ACE63BD4C96 /* CastManager+GoogleCast.swift */,
  				CA67D9CB84951B247A472ABF /* WebAuthenticationAnchors.swift */,
@@ -759,7 +96,7 @@ diff --git a/Shirox.xcodeproj/project.pbxproj b/Shirox.xcodeproj/project.pbxproj
  			);
  			path = Services;
  			sourceTree = "<group>";
-@@ -2243,6 +2263,8 @@
+@@ -2243,6 +2271,8 @@
  				AE3495C8FF869FA796FE181B /* AdvancedNetworkSettingsView.swift */,
  				F46AC89852F57EBEBDEFC977 /* GeneralSettingsView.swift */,
  				FE1AC518A4DC04950FDBEA96 /* DiscordSettingsView.swift */,
@@ -768,7 +105,16 @@ diff --git a/Shirox.xcodeproj/project.pbxproj b/Shirox.xcodeproj/project.pbxproj
  			);
  			path = Views;
  			sourceTree = "<group>";
-@@ -2492,6 +2514,7 @@
+@@ -2282,6 +2312,8 @@
+ 				2E7F10F162A39F3D89AE3150 /* SeanimeRuntime.js */,
+ 				FCBEAC7148133CCF2D13E786 /* SeanimeInstall.js */,
+ 				C050BE8CB634CB8373E369EF /* ExtensionRuntime.js */,
++				BFEE00000000000000000001 /* Bangumi.js */,
++				BFEE00000000000000000005 /* Bangumi.json */,
+ 			);
+ 			path = Resources;
+ 			sourceTree = "<group>";
+@@ -2492,6 +2524,7 @@
  				0A30FC88F37974F65C8D08EC /* AdvancedNetworkTests.swift */,
  				CC394382AD78405AC31B9814 /* ManaExtensionTests.swift */,
  				D6552C97EFF65DCD9E62EBC1 /* NWListenerReady.swift */,
@@ -776,7 +122,34 @@ diff --git a/Shirox.xcodeproj/project.pbxproj b/Shirox.xcodeproj/project.pbxproj
  			);
  			path = ShiroxTests;
  			sourceTree = SOURCE_ROOT;
-@@ -3014,6 +3037,7 @@
+@@ -2746,6 +2779,8 @@
+ 				564F14851F51102FF23997E2 /* SeanimeRuntime.js in Resources */,
+ 				6DAA1915860752FC4FE7D374 /* SeanimeInstall.js in Resources */,
+ 				FEE557BE2CC7D535BA4119DE /* ExtensionRuntime.js in Resources */,
++				BFEE00000000000000000002 /* Bangumi.js in Resources */,
++				BFEE00000000000000000006 /* Bangumi.json in Resources */,
+ 				96F99AC1B5109B2D802475A4 /* Localizable.xcstrings in Resources */,
+ 			);
+ 			runOnlyForDeploymentPostprocessing = 0;
+@@ -2768,6 +2803,8 @@
+ 				8394FB1A2900AA0612B931C8 /* SeanimeRuntime.js in Resources */,
+ 				40B24A0864D764C080CF4171 /* SeanimeInstall.js in Resources */,
+ 				864C300F1E47DB2105661644 /* ExtensionRuntime.js in Resources */,
++				BFEE00000000000000000003 /* Bangumi.js in Resources */,
++				BFEE00000000000000000007 /* Bangumi.json in Resources */,
+ 				A72DD4633E5DB0EC71B9EB98 /* Localizable.xcstrings in Resources */,
+ 				01C046B4AAC9A7DA8AAA3471 /* manga.icon in Resources */,
+ 			);
+@@ -2783,6 +2820,8 @@
+ 				AD0D3B00BB0506507CBCA03B /* SeanimeRuntime.js in Resources */,
+ 				F5F09B5AEE05E5CB69F486A6 /* SeanimeInstall.js in Resources */,
+ 				C10F42DA684E7AF85A2EB0BF /* ExtensionRuntime.js in Resources */,
++				BFEE00000000000000000004 /* Bangumi.js in Resources */,
++				BFEE00000000000000000008 /* Bangumi.json in Resources */,
+ 				56CE3B31B9DDE9D8587B9443 /* Localizable.xcstrings in Resources */,
+ 				4A2232B46F40B6D1B5862D17 /* manga.icon in Resources */,
+ 			);
+@@ -3014,6 +3053,7 @@
  				35DE9D632316EFAC32E8DAA0 /* AdvancedNetworkTests.swift in Sources */,
  				4DC87C1BED621B8E56B9B73B /* ManaExtensionTests.swift in Sources */,
  				A7395CC47E1D1989BB80DD2A /* NWListenerReady.swift in Sources */,
@@ -784,7 +157,7 @@ diff --git a/Shirox.xcodeproj/project.pbxproj b/Shirox.xcodeproj/project.pbxproj
  			);
  			runOnlyForDeploymentPostprocessing = 0;
  		};
-@@ -3347,6 +3371,10 @@
+@@ -3347,6 +3387,10 @@
  				BC6A40E470ABC6B9E992CCD7 /* SubtitleFontPicker.swift in Sources */,
  				C3D17D85ECC84C0C2388E812 /* CastManager+GoogleCast.swift in Sources */,
  				2B2FF6673197178CD0EAFC09 /* WebAuthenticationAnchors.swift in Sources */,
@@ -795,7 +168,7 @@ diff --git a/Shirox.xcodeproj/project.pbxproj b/Shirox.xcodeproj/project.pbxproj
  			);
  			runOnlyForDeploymentPostprocessing = 0;
  		};
-@@ -3682,6 +3710,10 @@
+@@ -3682,6 +3726,10 @@
  				43B90D3ECA7769138F4ECA90 /* SubtitleFontPicker.swift in Sources */,
  				6230B799A02D818B3BDD77BA /* CastManager+GoogleCast.swift in Sources */,
  				D0DB2E6F057BA3C15BAD5EB1 /* WebAuthenticationAnchors.swift in Sources */,
@@ -806,7 +179,7 @@ diff --git a/Shirox.xcodeproj/project.pbxproj b/Shirox.xcodeproj/project.pbxproj
  			);
  			runOnlyForDeploymentPostprocessing = 0;
  		};
-@@ -4018,6 +4050,10 @@
+@@ -4018,6 +4066,10 @@
  				35FE90486B4D0AE97FC8C789 /* SubtitleFontPicker.swift in Sources */,
  				7F54615FD4109698AA5432F0 /* CastManager+GoogleCast.swift in Sources */,
  				78CC5BF862660530517AC345 /* WebAuthenticationAnchors.swift in Sources */,
@@ -818,6 +191,7 @@ diff --git a/Shirox.xcodeproj/project.pbxproj b/Shirox.xcodeproj/project.pbxproj
  			runOnlyForDeploymentPostprocessing = 0;
  		};
 diff --git a/Shirox/Localizable.xcstrings b/Shirox/Localizable.xcstrings
+index 312e56a..db691ef 100644
 --- a/Shirox/Localizable.xcstrings
 +++ b/Shirox/Localizable.xcstrings
 @@ -37635,6 +37635,826 @@
@@ -1647,8 +1021,35 @@ diff --git a/Shirox/Localizable.xcstrings b/Shirox/Localizable.xcstrings
      "modules.module" : {
        "comment" : "ModuleImportView",
        "localizations" : {
+diff --git a/Shirox/Models/Media.swift b/Shirox/Models/Media.swift
+index 0f12671..d7932ae 100644
+--- a/Shirox/Models/Media.swift
++++ b/Shirox/Models/Media.swift
+@@ -56,6 +56,8 @@ struct Media: Identifiable, Codable, Equatable, Hashable, Sendable {
+     var tvdbID: Int?
+     /// A Simkl show's or movie's TMDB record, for a logo TVDB doesn't have.
+     var tmdbID: Int?
++    /// Namespaced metadata identity; never passed to AniList/MAL tracking or TVDB.
++    var moduleMetadata: ModuleMetadataIdentity?
+ 
+     var uniqueId: String {
+         // A Simkl show or movie is keyed by Simkl id, and "simkl-52991" is already a Simkl anime
+diff --git a/Shirox/Models/ModuleDefinition.swift b/Shirox/Models/ModuleDefinition.swift
+index 3d23f51..8dc0f4a 100644
+--- a/Shirox/Models/ModuleDefinition.swift
++++ b/Shirox/Models/ModuleDefinition.swift
+@@ -35,6 +35,8 @@ struct ModuleDefinition: Codable, Identifiable, Equatable {
+     var isLocalPlayback: Bool { supportsLocalPlayback == true }
+     var isJellyfin: Bool { supportsJellyfin == true }
+     var isManga: Bool { type == "mangas" || type == "manga" }
++    var isMetadata: Bool { type == "metadata" || id == BuiltInMetadataModules.bangumiID }
++    var isAnimePlayback: Bool { !isManga && !isMetadata }
+ 
+     /// The source site's page for a title, from the `href` this module gave it — for opening in a
+     /// browser. Relative paths (`/anime/1`, `anime/1`) resolve against `baseUrl`; bare ids
 diff --git a/Shirox/Models/ModuleMetadata.swift b/Shirox/Models/ModuleMetadata.swift
 new file mode 100644
+index 0000000..cf13eb9
 --- /dev/null
 +++ b/Shirox/Models/ModuleMetadata.swift
 @@ -0,0 +1,88 @@
@@ -1740,12 +1141,677 @@ new file mode 100644
 +        }
 +    }
 +}
+diff --git a/Shirox/Resources/Bangumi.js b/Shirox/Resources/Bangumi.js
+new file mode 100644
+index 0000000..7be3edf
+--- /dev/null
++++ b/Shirox/Resources/Bangumi.js
+@@ -0,0 +1,352 @@
++/* Shirox Bangumi metadata module 0.3.0. No dependencies; JavaScriptCore compatible.
++ * bgm.tv is a metadata/tracking service and provides no video streams.
++ * Edit the config below locally, or call Bangumi.configure() from a custom host.
++ */
++var BGM_CONFIG = {
++    username: '',
++    accessToken: '',
++    userAgent: 'quiteQa/ShiroxBangumi/0.3.0 (https://github.com/quiteQa/shirox-bangumi)',
++    searchLimit: 25
++};
++
++var Bangumi = (function () {
++    'use strict';
++    var API = 'https://api.bgm.tv/v0';
++    var SITE = 'https://bgm.tv';
++    var STATUS = { '想看': 1, '看过': 2, '在看': 3, '搁置': 4, '抛弃': 5 };
++
++    function fail(message) { throw new Error('[Bangumi] ' + message); }
++    function positiveId(value) {
++        var s = String(value == null ? '' : value).trim();
++        if (!/^[1-9]\d*$/.test(s) || !Number.isSafeInteger(Number(s))) fail('无效的 Bangumi ID。');
++        return Number(s);
++    }
++    function subjectId(value) {
++        var s = String(value == null ? '' : value).trim();
++        var m = s.match(/^https:\/\/(?:bgm\.tv|bangumi\.tv|chii\.in)\/subject\/([1-9]\d*)\/?(?:[?#].*)?$/i)
++            || s.match(/^(?:bgm:|subject:)([1-9]\d*)$/i);
++        return positiveId(m ? m[1] : s);
++    }
++    function integer(value, min, max, name) {
++        if (typeof value !== 'number' || !Number.isInteger(value) || value < min || value > max) {
++            fail(name + ' 必须是 ' + min + '–' + max + ' 的整数。');
++        }
++        return value;
++    }
++    function configure(options) {
++        if (!options || typeof options !== 'object' || Array.isArray(options)) fail('配置必须是对象。');
++        var allowed = ['username', 'accessToken', 'userAgent', 'searchLimit'];
++        var next = {};
++        allowed.forEach(function (key) { next[key] = BGM_CONFIG[key]; });
++        Object.keys(options).forEach(function (key) {
++            if (allowed.indexOf(key) === -1) fail('未知配置项：' + key);
++            if (key === 'searchLimit') next[key] = integer(options[key], 1, 50, 'searchLimit');
++            else {
++                if (typeof options[key] !== 'string' || /[\r\n]/.test(options[key])) fail('无效配置：' + key);
++                next[key] = options[key].trim();
++            }
++        });
++        if (!next.userAgent) fail('请设置带开发者标识及应用版本的 User-Agent。');
++        allowed.forEach(function (key) { BGM_CONFIG[key] = next[key]; });
++        // Deliberately do not return or log credentials.
++        return { username: next.username, authenticated: !!next.accessToken };
++    }
++    function query(values) {
++        return Object.keys(values).filter(function (k) { return values[k] !== undefined; })
++            .map(function (k) { return encodeURIComponent(k) + '=' + encodeURIComponent(String(values[k])); }).join('&');
++    }
++    async function request(path, method, body, authenticated) {
++        // Every URL is constructed here. Tokens never go to subject/image/video hosts.
++        if (typeof path !== 'string' || path.charAt(0) !== '/' || path.indexOf('://') !== -1) fail('无效 API 路径。');
++        var token = String(BGM_CONFIG.accessToken || '').trim();
++        if (authenticated && !token) fail('此操作需要 Bangumi Access Token；请仅在本机配置。');
++        var headers = { 'Accept': 'application/json', 'User-Agent': BGM_CONFIG.userAgent };
++        if (token) headers.Authorization = 'Bearer ' + token;
++        if (body !== undefined) headers['Content-Type'] = 'application/json';
++        var response;
++        try {
++            if (typeof fetchv2 === 'function') {
++                response = await fetchv2(API + path, headers, method || 'GET', body === undefined ? null : JSON.stringify(body));
++            } else if (typeof fetch === 'function') {
++                var options = { method: method || 'GET', headers: headers };
++                if (body !== undefined) options.body = JSON.stringify(body);
++                response = await fetch(API + path, options);
++            } else fail('宿主未提供 fetchv2 / fetch 网络接口。');
++        } catch (_) { fail('网络请求失败，请检查 api.bgm.tv 是否可访问。'); }
++        if (!response || typeof response.status !== 'number') fail('宿主返回了无效的 HTTP 响应。');
++        var status = response.status;
++        if (status < 200 || status >= 300) {
++            var reasons = {
++                401: 'Token 无效或已过期。', 403: '没有权限访问此内容。',
++                404: '条目、用户或收藏不存在，或收藏不可见。', 429: '请求过于频繁，请稍后重试。'
++            };
++            // Do not echo response bodies/transport errors: they may contain credentials.
++            fail('HTTP ' + status + '：' + (reasons[status] || 'Bangumi API 请求失败。'));
++        }
++        if (status === 204) return null;
++        try {
++            return typeof response.json === 'function' ? await response.json() : JSON.parse(await response.text());
++        } catch (_) { fail('Bangumi API 返回了无效 JSON。'); }
++    }
++    function pageData(page) {
++        if (!page || !Array.isArray(page.data)) fail('Bangumi API 分页格式发生变化。');
++        return page.data;
++    }
++    async function paged(path, params) {
++        var offset = 0, output = [], seen = Object.create(null);
++        // 200 x 200 covers long-running series, while bounding broken pagination.
++        for (var count = 0; count < 200; count++) {
++            params.offset = offset;
++            var page = await request(path + '?' + query(params));
++            var rows = pageData(page);
++            var fresh = 0;
++            rows.forEach(function (row) {
++                var id = positiveId(row.id);
++                if (!seen[id]) { seen[id] = true; output.push(row); fresh++; }
++            });
++            var next = offset + rows.length;
++            if (!rows.length) {
++                if (typeof page.total === 'number' && offset < page.total) fail('API 在分页结束前返回了空列表。');
++                return output;
++            }
++            if (!fresh) fail('API 重复返回同一分页，已停止以避免无限请求。');
++            if (typeof page.total === 'number' && next >= page.total) return output;
++            if (typeof page.total !== 'number' && rows.length < params.limit) return output;
++            offset = next;
++        }
++        fail('分页超过安全上限，未返回不完整的剧集列表。');
++    }
++    function isAnime(item) { return item && item.type === 2 && item.nsfw !== true; }
++    function searchItem(item) {
++        var id = positiveId(item.id), images = item.images || {};
++        return {
++            title: text(item.name_cn) || text(item.name) || ('Bangumi #' + id),
++            image: images.large || images.common || images.medium || images.small || '',
++            href: SITE + '/subject/' + id
++        };
++    }
++    async function getSubject(value) {
++        var item = await request('/subjects/' + subjectId(value));
++        if (!isAnime(item)) fail('此模块仅支持非成人动画条目。');
++        return item;
++    }
++    async function searchSubjects(keyword) {
++        keyword = String(keyword == null ? '' : keyword).trim();
++        if (!keyword) return [];
++        if (/^(?:bgm:|subject:|https:\/\/(?:bgm\.tv|bangumi\.tv|chii\.in)\/subject\/)/i.test(keyword)) {
++            return [await getSubject(keyword)];
++        }
++        var command = keyword.match(/^(想看|看过|在看|搁置|抛弃|收藏)(?:\s+(.+))?$/);
++        if (command) {
++            var username = (command[2] || BGM_CONFIG.username || '').trim();
++            if (!username) fail('请先设置 BGM_CONFIG.username，或搜索“在看 用户名”。');
++            var page = await getCollections(username, { type: STATUS[command[1]], limit: BGM_CONFIG.searchLimit });
++            return page.data.map(function (entry) { return entry.subject; }).filter(isAnime);
++        }
++        var result = await request('/search/subjects?' + query({ limit: BGM_CONFIG.searchLimit, offset: 0 }), 'POST', {
++            keyword: keyword, sort: 'match', filter: { type: [2], nsfw: false }
++        });
++        return pageData(result).filter(isAnime);
++    }
++    async function search(keyword) { return (await searchSubjects(keyword)).map(searchItem); }
++    function aliasList(item) {
++        var names = [item.name, item.name_cn];
++        (Array.isArray(item.infobox) ? item.infobox : []).forEach(function (field) {
++            if (!field || field.key !== '别名') return;
++            if (typeof field.value === 'string') names.push(field.value);
++            else if (Array.isArray(field.value)) field.value.forEach(function (x) {
++                if (x && typeof x.v === 'string') names.push(x.v);
++            });
++        });
++        return names.map(function (x) { return text(x); })
++            .filter(function (x, i, all) { return x && all.indexOf(x) === i; });
++    }
++    function text(value) { return typeof value === 'string' && value.trim() ? value.trim() : null; }
++    function count(value) { return Number.isSafeInteger(value) && value > 0 ? value : null; }
++    function date(value) {
++        if (typeof value !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(value)) return null;
++        var parsed = new Date(value + 'T00:00:00Z');
++        return !isNaN(parsed.getTime()) && parsed.toISOString().slice(0, 10) === value ? value : null;
++    }
++    function fieldValues(item, key) {
++        var output = [];
++        (Array.isArray(item.infobox) ? item.infobox : []).forEach(function (field) {
++            if (!field || field.key !== key) return;
++            var values = Array.isArray(field.value) ? field.value.map(function (v) { return v && v.v; }) : [field.value];
++            values.forEach(function (v) { if (text(v) && output.indexOf(v.trim()) === -1) output.push(v.trim()); });
++        });
++        return output;
++    }
++    function metadata(item, detailLevel) {
++        var id = positiveId(item.id), images = item.images || {}, rating = item.rating || {};
++        var score = typeof rating.score === 'number' ? rating.score : item.score;
++        var rank = rating.rank || item.rank, releaseDate = date(item.date);
++        var tags = (Array.isArray(item.tags) ? item.tags : []).map(function (tag) {
++            return text(typeof tag === 'string' ? tag : tag && tag.name);
++        }).filter(function (tag, i, all) { return tag && all.indexOf(tag) === i; });
++        return {
++            schemaVersion: 1,
++            source: 'bangumi',
++            id: id,
++            url: SITE + '/subject/' + id,
++            detailLevel: detailLevel,
++            type: 'ANIME',
++            title: text(item.name_cn) || text(item.name) || ('Bangumi #' + id),
++            titles: { chinese: text(item.name_cn), original: text(item.name) },
++            aliases: aliasList(item),
++            description: text(item.summary) || text(item.short_summary) || '',
++            poster: text(images.large) || text(images.common) || text(images.medium) || text(images.small) || text(item.image),
++            images: {
++                large: text(images.large), common: text(images.common), medium: text(images.medium),
++                small: text(images.small), grid: text(images.grid)
++            },
++            format: text(item.platform),
++            releaseDate: releaseDate,
++            year: releaseDate ? Number(releaseDate.slice(0, 4)) : null,
++            episodeCount: count(item.eps),
++            totalEpisodes: count(item.total_episodes),
++            // Bangumi tags are community labels, not a strict genre taxonomy.
++            tags: tags,
++            studios: fieldValues(item, '动画制作'),
++            directors: fieldValues(item, '导演'),
++            rating: {
++                score: typeof score === 'number' && isFinite(score) && score > 0 && score <= 10 ? score : null,
++                scale: 10,
++                rank: count(rank),
++                votes: Number.isSafeInteger(rating.total) && rating.total >= 0 ? rating.total : null
++            }
++        };
++    }
++    async function getMetadata(value) { return metadata(await getSubject(value), 'subject'); }
++    async function searchMetadata(keyword) {
++        return (await searchSubjects(keyword)).map(function (item) { return metadata(item, 'search'); });
++    }
++    async function browseMetadata(catalog, page) {
++        var sorts = { topRated: 'rank', newest: 'date' };
++        if (catalog !== 'topRated' && catalog !== 'newest') fail('不支持的元数据目录。');
++        page = page === undefined ? 1 : integer(page, 1, 1000, 'page');
++        var result = await request('/subjects?' + query({ type: 2, sort: sorts[catalog], limit: 25, offset: (page - 1) * 25 }));
++        return pageData(result).filter(isAnime).map(function (item) { return metadata(item, 'search'); });
++    }
++    async function details(value) {
++        var item = await getMetadata(value), info = [];
++        if (item.rating.score !== null) info.push('Bangumi 评分：' + item.rating.score + '/10');
++        if (item.rating.rank !== null) info.push('排名：#' + item.rating.rank);
++        if (item.episodeCount !== null) info.push('正片集数：' + item.episodeCount);
++        if (item.format) info.push('类型：' + item.format);
++        if (item.description) info.push(item.description);
++        info.push('此模块展示 Bangumi 条目数据；bgm.tv 不提供视频流。');
++        return [{ description: info.join('\n\n'), aliases: item.aliases.join(' / '), airdate: item.releaseDate || '', metadata: item }];
++    }
++    async function getEpisodes(value) {
++        var id = subjectId(value);
++        // Validate the subject type before listing episodes (also covers direct ID callers).
++        await getSubject(id);
++        var rows = await paged('/episodes', { subject_id: id, type: 0, limit: 200 });
++        return rows.filter(function (ep) { return ep.type === 0 && ep.subject_id === id; })
++            .sort(function (a, b) { return a.sort - b.sort || a.id - b.id; });
++    }
++    async function episodes(value) {
++        var rows = await getEpisodes(value);
++        return rows.filter(function (ep) { return typeof ep.sort === 'number' && isFinite(ep.sort) && ep.sort > 0; })
++            .map(function (ep) {
++                return { number: ep.sort, href: SITE + '/ep/' + positiveId(ep.id) };
++            });
++    }
++    async function getEpisodeMetadata(value) {
++        var id = subjectId(value), rows = await getEpisodes(id);
++        return rows.filter(function (ep) { return typeof ep.sort === 'number' && isFinite(ep.sort) && ep.sort > 0; })
++            .map(function (ep) {
++                return {
++                    source: 'bangumi', id: positiveId(ep.id), subjectId: id,
++                    number: ep.sort,
++                    episodeNumber: typeof ep.ep === 'number' && isFinite(ep.ep) && ep.ep > 0 ? ep.ep : null,
++                    title: text(ep.name_cn) || text(ep.name) || ('第 ' + ep.sort + ' 集'),
++                    originalTitle: text(ep.name), description: text(ep.desc) || '',
++                    airdate: date(ep.airdate), duration: text(ep.duration),
++                    durationSeconds: count(ep.duration_seconds), url: SITE + '/ep/' + positiveId(ep.id)
++                };
++            });
++    }
++    function usernamePath(username) {
++        if (typeof username !== 'string' || !username.trim() || /[\r\n]/.test(username)) fail('请输入 Bangumi 用户名。');
++        return encodeURIComponent(username.trim());
++    }
++    async function getCollections(username, options) {
++        options = options || {};
++        var params = {
++            subject_type: 2,
++            limit: integer(options.limit === undefined ? 50 : options.limit, 1, 50, 'limit'),
++            offset: integer(options.offset === undefined ? 0 : options.offset, 0, 1000000, 'offset')
++        };
++        if (options.type !== undefined) params.type = integer(options.type, 1, 5, '收藏类型');
++        var page = await request('/users/' + usernamePath(username) + '/collections?' + query(params));
++        pageData(page);
++        return page;
++    }
++    async function getCollection(username, value) {
++        return request('/users/' + usernamePath(username) + '/collections/' + subjectId(value));
++    }
++    async function getMe() { return request('/me', 'GET', undefined, true); }
++    async function setCollection(value, change) {
++        var id = subjectId(value), payload = {};
++        if (!change || typeof change !== 'object' || Array.isArray(change)) fail('收藏修改内容必须是对象。');
++        Object.keys(change).forEach(function (key) {
++            if (key === 'type') payload.type = integer(change.type, 1, 5, '收藏类型');
++            else if (key === 'rate') payload.rate = integer(change.rate, 0, 10, '评分');
++            else if (key === 'comment' && typeof change.comment === 'string') payload.comment = change.comment;
++            else if (key === 'private' && typeof change.private === 'boolean') payload.private = change.private;
++            else if (key === 'tags' && Array.isArray(change.tags) && change.tags.every(function (t) {
++                return typeof t === 'string' && t.length > 0 && !/\s/.test(t);
++            })) payload.tags = change.tags.slice();
++            else fail('不支持的收藏字段或字段值：' + key + '。动画进度请使用 setEpisodeState。');
++        });
++        if (!Object.keys(payload).length) fail('没有要修改的收藏字段。');
++        // POST upserts; omitted fields are preserved by the API. No progress guesses.
++        return request('/users/-/collections/' + id, 'POST', payload, true);
++    }
++    async function setEpisodeState(value, episodeIds, state) {
++        var id = subjectId(value);
++        integer(state, 0, 3, '章节状态');
++        if (!Array.isArray(episodeIds) || !episodeIds.length || episodeIds.length > 100) fail('每次需提供 1–100 个明确的章节 ID。');
++        var ids = episodeIds.map(positiveId).filter(function (x, i, all) { return all.indexOf(x) === i; });
++        if (!BGM_CONFIG.accessToken) fail('修改进度需要 Bangumi Access Token。');
++        // Validate membership before mutating anything. Episode numbers are not API IDs.
++        var rows = await getEpisodes(id);
++        var allowed = Object.create(null);
++        rows.forEach(function (ep) { allowed[ep.id] = true; });
++        if (ids.some(function (ep) { return !allowed[ep]; })) fail('章节 ID 不属于该动画的正片列表，未修改任何进度。');
++        return request('/users/-/collections/' + id + '/episodes', 'PATCH', { episode_id: ids, type: state }, true);
++    }
++    return {
++        configure: configure, search: search, details: details, episodes: episodes,
++        searchMetadata: searchMetadata, getMetadata: getMetadata, getEpisodeMetadata: getEpisodeMetadata,
++        browseMetadata: browseMetadata,
++        getSubject: getSubject, getEpisodes: getEpisodes,
++        getCollections: getCollections, getCollection: getCollection, getMe: getMe,
++        setCollection: setCollection, setEpisodeState: setEpisodeState
++    };
++})();
++
++// Shirox / Sora entry points: host expects stringified JSON.
++async function searchResults(keyword) { return JSON.stringify(await Bangumi.search(keyword)); }
++async function extractDetails(url) { return JSON.stringify(await Bangumi.details(url)); }
++async function extractEpisodes(url) { return JSON.stringify(await Bangumi.episodes(url)); }
++// Structured metadata entry points for hosts that explicitly implement this contract.
++// Unmodified Shirox does not call these automatically.
++async function searchMetadata(keyword) { return JSON.stringify(await Bangumi.searchMetadata(keyword)); }
++async function extractMetadata(url) { return JSON.stringify(await Bangumi.getMetadata(url)); }
++async function extractEpisodeMetadata(url) { return JSON.stringify(await Bangumi.getEpisodeMetadata(url)); }
++async function browseMetadata(catalog, page) { return JSON.stringify(await Bangumi.browseMetadata(catalog, page)); }
++async function extractStreamUrl() {
++    throw new Error('[Bangumi] bgm.tv 不提供视频流；请切换到播放源。此模块不会把网页地址伪装成视频链接。');
++}
++
++if (typeof module !== 'undefined' && module.exports) {
++    module.exports = {
++        Bangumi: Bangumi, searchResults: searchResults, extractDetails: extractDetails,
++        extractEpisodes: extractEpisodes, extractStreamUrl: extractStreamUrl,
++        searchMetadata: searchMetadata, extractMetadata: extractMetadata, extractEpisodeMetadata: extractEpisodeMetadata,
++        browseMetadata: browseMetadata
++    };
++}
+diff --git a/Shirox/Resources/Bangumi.json b/Shirox/Resources/Bangumi.json
+new file mode 100644
+index 0000000..2459fe6
+--- /dev/null
++++ b/Shirox/Resources/Bangumi.json
+@@ -0,0 +1,9 @@
++{
++  "sourceName": "Bangumi",
++  "version": "0.3.0",
++  "baseUrl": "https://bgm.tv",
++  "scriptUrl": "https://raw.githubusercontent.com/quiteQa/shirox-bangumi/main/bangumi.js",
++  "type": "metadata",
++  "asyncJS": true,
++  "language": "中文 / 日本語"
++}
+diff --git a/Shirox/Services/BackupSections.swift b/Shirox/Services/BackupSections.swift
+index dcc31e8..7d938cd 100644
+--- a/Shirox/Services/BackupSections.swift
++++ b/Shirox/Services/BackupSections.swift
+@@ -165,7 +165,7 @@ struct SettingsBackupSection: BackupSection {
+     static let stringKeys = [
+         "librarySortOrder", "libraryStatusOrder", "mangaReadingMode",
+         "preferredQuality", "titleLanguagePriority", SyncTargets.key,
+-        DiscoverySource.choiceKey, DiscoverySource.kindKey, "playerHoldAction",
++        DiscoverySource.choiceKey, DiscoverySource.kindKey, DiscoverySource.metadataKey, "playerHoldAction",
+         AppTint.key, AppColorScheme.key, AppTab.orderKey, AppTab.hiddenKey, AppTab.launchKey,
+         PullToRefreshStyle.key, "discordApplicationID"
+     ]
+diff --git a/Shirox/Services/DiscoverySource.swift b/Shirox/Services/DiscoverySource.swift
+index bbf703d..9b37093 100644
+--- a/Shirox/Services/DiscoverySource.swift
++++ b/Shirox/Services/DiscoverySource.swift
+@@ -13,8 +13,9 @@ final class DiscoverySource: ObservableObject {
+     // Nonisolated: the settings backup lists them outside the main actor.
+     nonisolated static let choiceKey = "discoverySource"
+     nonisolated static let kindKey = "simklDiscoverKind"
++    nonisolated static let metadataKey = "metadataModuleID"
+ 
+-    enum Choice: String { case providers, simkl }
++    enum Choice: String { case providers, simkl, metadata }
+ 
+     @Published private(set) var choice: Choice
+     /// Home's and Search's Anime / Shows / Movies pills.
+@@ -23,6 +24,17 @@ final class DiscoverySource: ObservableObject {
+     }
+     /// Simkl chosen, and signed in to it. Signing out falls back to the chain by itself.
+     @Published private(set) var usesSimkl = false
++    @Published private(set) var usesMetadata = false
++    @Published private(set) var metadataModuleID: String?
++
++    var metadataModule: ModuleDefinition? {
++        ModuleManager.shared.metadataModules.first { $0.id == metadataModuleID }
++    }
++
++    var sourceID: String {
++        if usesMetadata { return "metadata-\(metadataModuleID ?? "")" }
++        return usesSimkl ? "simkl-\(simklKind.rawValue)" : "providers"
++    }
+ 
+     private let defaults: UserDefaults
+     private let selectProvider: @MainActor (ProviderType) -> Void
+@@ -35,6 +47,7 @@ final class DiscoverySource: ObservableObject {
+         self.defaults = defaults
+         self.selectProvider = selectProvider
+         choice = Choice(rawValue: defaults.string(forKey: Self.choiceKey) ?? "") ?? .providers
++        metadataModuleID = defaults.string(forKey: Self.metadataKey)
+         let stored = MediaKind(rawValue: defaults.string(forKey: Self.kindKey) ?? "")
+         simklKind = stored.flatMap { MediaKind.simklKinds.contains($0) ? $0 : nil } ?? .anime
+         (signedIn ?? SimklAuthManager.shared.$isLoggedIn.eraseToAnyPublisher())
+@@ -43,12 +56,27 @@ final class DiscoverySource: ObservableObject {
+                 self?.update()
+             }
+             .store(in: &cancellables)
++        ModuleManager.shared.$modules
++            .dropFirst()
++            .sink { [weak self] _ in
++                // @Published emits before the array is assigned.
++                Task { @MainActor [weak self] in self?.update() }
++            }
++            .store(in: &cancellables)
++        update()
+     }
+ 
+     func chooseSimkl() {
+         set(.simkl)
+     }
+ 
++    func chooseMetadataModule(_ module: ModuleDefinition) {
++        guard module.isMetadata else { return }
++        metadataModuleID = module.id
++        defaults.set(module.id, forKey: Self.metadataKey)
++        set(.metadata)
++    }
++
+     /// Back to the chain, with `type` first in it.
+     func chooseProvider(_ type: ProviderType) {
+         set(.providers)
+@@ -64,6 +92,7 @@ final class DiscoverySource: ObservableObject {
+     /// After a profile switch: what the new profile saved, and nothing of the last one's.
+     func reloadForProfileSwitch() {
+         choice = Choice(rawValue: defaults.string(forKey: Self.choiceKey) ?? "") ?? .providers
++        metadataModuleID = defaults.string(forKey: Self.metadataKey)
+         let stored = MediaKind(rawValue: defaults.string(forKey: Self.kindKey) ?? "")
+         simklKind = stored.flatMap { MediaKind.simklKinds.contains($0) ? $0 : nil } ?? .anime
+         update()
+@@ -72,5 +101,7 @@ final class DiscoverySource: ObservableObject {
+     private func update() {
+         let value = choice == .simkl && signedIn
+         if usesSimkl != value { usesSimkl = value }
++        let metadata = choice == .metadata && metadataModule != nil
++        if usesMetadata != metadata { usesMetadata = metadata }
+     }
+ }
+diff --git a/Shirox/Services/JSEngine.swift b/Shirox/Services/JSEngine.swift
+index bbb3700..09dce1b 100644
+--- a/Shirox/Services/JSEngine.swift
++++ b/Shirox/Services/JSEngine.swift
+@@ -40,6 +40,7 @@ final class JSEngine: ObservableObject {
+     // MARK: - Module Loading
+ 
+     func loadModule(_ module: ModuleDefinition) async throws {
++        guard !module.isMetadata else { throw ProviderError.unsupported }
+         // Clear cookies so the previous module's session doesn't bleed into this one
+         HTTPCookieStorage.shared.cookies?.forEach { HTTPCookieStorage.shared.deleteCookie($0) }
+         NetworkFetchManager.clearCookies()
+diff --git a/Shirox/Services/ModuleCheck.swift b/Shirox/Services/ModuleCheck.swift
+index df3d4be..ba9fdcd 100644
+--- a/Shirox/Services/ModuleCheck.swift
++++ b/Shirox/Services/ModuleCheck.swift
+@@ -20,7 +20,7 @@ enum ModuleCheckResult: Codable, Equatable {
+ }
+ 
+ enum ModuleCheckStep: String, Codable {
+-    case load, search, episodes, streams
++    case load, search, episodes, streams, metadata
+ 
+     var label: String {
+         switch self {
+@@ -28,6 +28,7 @@ enum ModuleCheckStep: String, Codable {
+         case .search: return String(localized: "common.search")
+         case .episodes: return String(localized: "common.episodes")
+         case .streams: return String(localized: "modules.streams")
++        case .metadata: return String(localized: "modules.metadata_source")
+         }
+     }
+ }
+@@ -49,6 +50,9 @@ enum ModuleCheck {
+             group.addTask { await run(module) }
+             group.addTask {
+                 try? await Task.sleep(nanoseconds: UInt64(timeout * 1_000_000_000))
++                if module.isMetadata {
++                    return .failed(step: .metadata, reason: String(localized: "modules.metadata_timed_out"))
++                }
+                 return .failed(step: .streams, reason: String(localized: "modules.didnt_reach_a_stream_in \(Int(timeout))"))
+             }
+             let first = await group.next() ?? .failed(step: .load, reason: String(localized: "modules.didnt_run"))
+@@ -58,6 +62,19 @@ enum ModuleCheck {
+     }
+ 
+     private static func run(_ module: ModuleDefinition) async -> ModuleCheckResult {
++        if module.isMetadata {
++            do {
++                let service = ModuleMetadataService(module: module)
++                let results = try await service.search(queries[0])
++                guard let first = results.first else {
++                    return .failed(step: .search, reason: String(localized: "modules.metadata_empty"))
++                }
++                _ = try await service.detail(id: first.id)
++                return .passed
++            } catch {
++                return .failed(step: .metadata, reason: error.localizedDescription)
++            }
++        }
+         let runner = ModuleJSRunner()
+         do {
+             try await runner.load(module: module)
+diff --git a/Shirox/Services/ModuleJSRunner.swift b/Shirox/Services/ModuleJSRunner.swift
+index b8b50b6..7b1884a 100644
+--- a/Shirox/Services/ModuleJSRunner.swift
++++ b/Shirox/Services/ModuleJSRunner.swift
+@@ -147,6 +147,13 @@ final class ModuleJSRunner {
+         return StreamProbe.checks(module?.ext?.kind) ? await StreamProbe.playable(streams) : streams
+     }
+ 
++    /// Structured metadata calls have no access to the shared playback runner.
++    func readMetadata<T: Decodable>(_ function: String, args: [Any]) async throws -> T {
++        let json = try await callAsyncJS(function, args: args)
++        guard let data = json.data(using: .utf8) else { throw ProviderError.unsupported }
++        return try JSONDecoder().decode(T.self, from: data)
++    }
++
+     // MARK: - Promise resolution
+ 
+     private func callAsyncJS(_ functionName: String, args: [Any]) async throws -> String {
+diff --git a/Shirox/Services/ModuleManager.swift b/Shirox/Services/ModuleManager.swift
+index 8a7bc8c..011750d 100644
+--- a/Shirox/Services/ModuleManager.swift
++++ b/Shirox/Services/ModuleManager.swift
+@@ -7,8 +7,8 @@ import SwiftUI
+ /// module, else nil.
+ enum AnimeModulePreference {
+     static func pick(active: ModuleDefinition?, modules: [ModuleDefinition]) -> ModuleDefinition? {
+-        if let active, active.isManga == false { return active }
+-        return modules.first { $0.isManga == false }
++        if let active, active.isAnimePlayback { return active }
++        return modules.first { $0.isAnimePlayback }
+     }
+ }
+ 
+@@ -17,6 +17,7 @@ final class ModuleManager: ObservableObject {
+     static let shared = ModuleManager()
+ 
+     @Published var modules: [ModuleDefinition] = []
++    var metadataModules: [ModuleDefinition] { BuiltInMetadataModules.merging(modules) }
+     @Published var activeModule: ModuleDefinition?
+     @Published var moduleReadyId: String?
+     @Published var isLoading = false
+@@ -150,7 +151,7 @@ final class ModuleManager: ObservableObject {
+             checkResults.removeValue(forKey: module.id)
+ 
+             // Auto-select if it's the first module
+-            if activeModule == nil {
++            if activeModule == nil || module.isMetadata {
+                 selectModule(module)
+             }
+         } catch {
+@@ -185,7 +186,7 @@ final class ModuleManager: ObservableObject {
+         lastAddedModuleID = module.id
+         checkResults.removeValue(forKey: module.id)
+         persistCheckResults()
+-        if activeModule == nil { selectModule(module) }
++        if activeModule == nil || module.isMetadata { selectModule(module) }
+     }
+ 
+     /// Puts back a module a backup carried whole: one from files, or one with an edited script.
+@@ -298,6 +299,11 @@ final class ModuleManager: ObservableObject {
+     // MARK: - Select Module
+ 
+     func selectModule(_ module: ModuleDefinition) {
++        if module.isMetadata {
++            if activeModule?.id == module.id { deselectModule() }
++            DiscoverySource.shared.chooseMetadataModule(module)
++            return
++        }
+         activeModule = module
+         UserDefaults.standard.set(module.id, forKey: activeKey)
+         
+@@ -315,6 +321,7 @@ final class ModuleManager: ObservableObject {
+     /// Returns false when the script failed to load. Used by flows that must
+     /// call into the module immediately after switching (Continue Reading).
+     func selectAndAwaitReady(_ module: ModuleDefinition) async -> Bool {
++        guard !module.isMetadata else { return false }
+         activeModule = module
+         UserDefaults.standard.set(module.id, forKey: activeKey)
+         do {
+@@ -330,7 +337,10 @@ final class ModuleManager: ObservableObject {
+     // MARK: - Reorder Modules
+ 
+     func moveModules(from source: IndexSet, to destination: Int) {
+-        modules.move(fromOffsets: source, toOffset: destination)
++        let bundledCopies = modules.filter { $0.id == BuiltInMetadataModules.bangumiID }
++        var movable = modules.filter { $0.id != BuiltInMetadataModules.bangumiID }
++        movable.move(fromOffsets: source, toOffset: destination)
++        modules = movable + bundledCopies
+         saveToStorage()
+     }
+ 
+@@ -424,10 +434,14 @@ final class ModuleManager: ObservableObject {
+ 
+             let wasActive = activeModule?.id == modules[i].id
+             modules[i] = fresh
++            if fresh.isMetadata { checkResults.removeValue(forKey: fresh.id) }
+             if wasActive { selectModule(fresh) }
+             didUpdate = true
+         }
+-        if didUpdate { saveToStorage() }
++        if didUpdate {
++            saveToStorage()
++            persistCheckResults()
++        }
+     }
+ 
+     // MARK: - Asset Caching
 diff --git a/Shirox/Services/ModuleMetadataService.swift b/Shirox/Services/ModuleMetadataService.swift
 new file mode 100644
+index 0000000..cd5a734
 --- /dev/null
 +++ b/Shirox/Services/ModuleMetadataService.swift
-@@ -0,0 +1,53 @@
+@@ -0,0 +1,83 @@
 +import Foundation
++
++/// Bundled metadata sources are available without installing or downloading a script.
++@MainActor
++enum BuiltInMetadataModules {
++    // Keep the original identity so bookmarks and discovery settings survive the upgrade.
++    nonisolated static let bangumiID = "https://raw.githubusercontent.com/quiteQa/shirox-bangumi/main/bangumi.js"
++    static let bangumi = try? loadBangumi(from: .main)
++
++    static func loadBangumi(from bundle: Bundle) throws -> ModuleDefinition {
++        guard let manifest = bundle.url(forResource: "Bangumi", withExtension: "json"),
++              let script = bundle.url(forResource: "Bangumi", withExtension: "js") else {
++            throw CocoaError(.fileNoSuchFile)
++        }
++        var module = try JSONDecoder().decode(ModuleDefinition.self, from: Data(contentsOf: manifest))
++        guard module.id == bangumiID, module.type == "metadata" else { throw ProviderError.unsupported }
++        module.scriptContent = try String(contentsOf: script, encoding: .utf8)
++        return module
++    }
++
++    static func merging(_ installed: [ModuleDefinition]) -> [ModuleDefinition] {
++        (bangumi.map { [$0] } ?? []) + installed.filter { $0.isMetadata && $0.id != bangumiID }
++    }
++}
 +
 +/// A separate runner prevents reading metadata from replacing the playback module's JS.
 +@MainActor
@@ -1754,10 +1820,17 @@ new file mode 100644
 +    private let runner = ModuleJSRunner()
 +    private var loaded = false
 +
-+    init(module: ModuleDefinition) { self.module = module }
++    init(module: ModuleDefinition) {
++        self.module = module.id == BuiltInMetadataModules.bangumiID
++            ? (BuiltInMetadataModules.bangumi ?? module) : module
++    }
 +
 +    private func prepare() async throws {
 +        guard module.isMetadata else { throw ProviderError.unsupported }
++        // A broken bundle must report an error rather than silently downloading executable code.
++        if module.id == BuiltInMetadataModules.bangumiID, BuiltInMetadataModules.bangumi == nil {
++            throw CocoaError(.fileNoSuchFile)
++        }
 +        if !loaded {
 +            try await runner.load(module: module)
 +            loaded = true
@@ -1798,8 +1871,194 @@ new file mode 100644
 +        return records.filter { seen.insert("\($0.source):\($0.id)").inserted }
 +    }
 +}
+diff --git a/Shirox/ViewModels/HomeViewModel.swift b/Shirox/ViewModels/HomeViewModel.swift
+index c18222c..3560682 100644
+--- a/Shirox/ViewModels/HomeViewModel.swift
++++ b/Shirox/ViewModels/HomeViewModel.swift
+@@ -15,6 +15,8 @@ final class HomeViewModel: ObservableObject {
+     @Published private(set) var feedProvider: ProviderType?
+ 
+     private var loaded = false
++    private var loadedSourceID: String?
++    private var generation = UUID()
+     private var cancellables = Set<AnyCancellable>()
+ 
+     init() {
+@@ -35,23 +37,43 @@ final class HomeViewModel: ObservableObject {
+     }
+ 
+     func load() async {
+-        guard !loaded else { return }
++        let sourceID = DiscoverySource.shared.sourceID
++        guard !loaded || loadedSourceID != sourceID else { return }
++        let requestID = UUID()
++        generation = requestID
+         isLoading = true
+         error = nil
++        if let loadedSourceID, loadedSourceID != sourceID {
++            apply(HomeFeed(trending: [], seasonal: [], lastSeason: [], popular: [], topRated: []), from: nil)
++        }
+ 
+         do {
++            if let module = DiscoverySource.shared.metadataModule, DiscoverySource.shared.usesMetadata {
++                let service = ModuleMetadataService(module: module)
++                let ranked = try await service.browse(.topRated)
++                let newest = try await service.browse(.newest)
++                guard generation == requestID, DiscoverySource.shared.sourceID == sourceID else { return }
++                apply(HomeFeed(trending: ranked, seasonal: newest, lastSeason: [], popular: [], topRated: ranked), from: nil)
++                loaded = true
++                loadedSourceID = sourceID
++                isLoading = false
++                return
++            }
+             // One call, not five. Each provider decides how few requests that actually takes
+             // (AniList: a single aliased GraphQL query; MAL: five, paced). Going through
+             // `call` once also means the whole screen comes from one provider — five separate
+             // calls could each fall back independently and leave Home showing a mix.
+             let feed = try await ProviderManager.shared.call { try await $0.homeFeed() }
++            guard generation == requestID, DiscoverySource.shared.sourceID == sourceID else { return }
+             let type = ProviderManager.shared.primary?.providerType
+             apply(feed, from: type)
+             if let type {
+                 HomeCacheStore.shared.save(feed: feed, provider: type)
+             }
+             loaded = true
++            loadedSourceID = sourceID
+         } catch {
++            guard generation == requestID, DiscoverySource.shared.sourceID == sourceID else { return }
+             self.error = error.localizedDescription
+             // A reload that fails (e.g. right after switching providers) leaves whatever is on
+             // screen untouched — nothing above clears it on failure, by design, so a background
+@@ -83,6 +105,10 @@ final class HomeViewModel: ObservableObject {
+     // MARK: - Private
+ 
+     private func seedFromCache() {
++        if DiscoverySource.shared.usesMetadata {
++            apply(HomeFeed(trending: [], seasonal: [], lastSeason: [], popular: [], topRated: []), from: nil)
++            return
++        }
+         guard let type = ProviderManager.shared.primary?.providerType,
+               let cached = HomeCacheStore.shared.snapshot(provider: type) else { return }
+         apply(cached.feed, from: type)
+diff --git a/Shirox/ViewModels/SearchViewModel.swift b/Shirox/ViewModels/SearchViewModel.swift
+index 50919d7..7c2470b 100644
+--- a/Shirox/ViewModels/SearchViewModel.swift
++++ b/Shirox/ViewModels/SearchViewModel.swift
+@@ -30,6 +30,14 @@ final class SearchViewModel: ObservableObject {
+             .dropFirst()
+             .sink { [weak self] _ in self?.clearResults() }
+             .store(in: &cancellables)
++        DiscoverySource.shared.$metadataModuleID
++            .dropFirst()
++            .sink { [weak self] _ in self?.clearResults() }
++            .store(in: &cancellables)
++        DiscoverySource.shared.$usesMetadata
++            .dropFirst()
++            .sink { [weak self] _ in self?.clearResults() }
++            .store(in: &cancellables)
+     }
+ 
+     func search(usingModule: Bool) {
+@@ -46,7 +54,13 @@ final class SearchViewModel: ObservableObject {
+         simklFailedKinds = []
+         searchTask = Task {
+             do {
+-                if usingModule {
++                if let module = DiscoverySource.shared.metadataModule, DiscoverySource.shared.usesMetadata {
++                    let service = ModuleMetadataService(module: module)
++                    let result = try await service.search(q)
++                    if !Task.isCancelled {
++                        aniListResults = result.map { $0.media(moduleID: module.id) }
++                    }
++                } else if usingModule {
+                     CloudflareBypassManager.shared.pendingVerificationURL = nil
+                     var res: [SearchItem]
+                     do {
+diff --git a/Shirox/Views/Downloads/BatchDownloadModulePickerView.swift b/Shirox/Views/Downloads/BatchDownloadModulePickerView.swift
+index 4f4d7f1..7a3f60d 100644
+--- a/Shirox/Views/Downloads/BatchDownloadModulePickerView.swift
++++ b/Shirox/Views/Downloads/BatchDownloadModulePickerView.swift
+@@ -25,7 +25,7 @@ struct BatchDownloadModulePickerView: View {
+     var body: some View {
+         NavigationStack {
+             ModulePickerRows {
+-                ForEach(moduleManager.modules) { module in
++                ForEach(moduleManager.modules.filter { !$0.isMetadata }) { module in
+                     BatchDownloadModuleRow(
+                         module: module,
+                         mediaId: mediaId,
+diff --git a/Shirox/Views/Downloads/DownloadModulePickerView.swift b/Shirox/Views/Downloads/DownloadModulePickerView.swift
+index 403dc34..22c3f64 100644
+--- a/Shirox/Views/Downloads/DownloadModulePickerView.swift
++++ b/Shirox/Views/Downloads/DownloadModulePickerView.swift
+@@ -40,7 +40,7 @@ struct DownloadModulePickerView: View {
+     var body: some View {
+         NavigationStack {
+             ModulePickerRows {
+-                ForEach(moduleManager.modules) { module in
++                ForEach(moduleManager.modules.filter { !$0.isMetadata }) { module in
+                     DownloadModuleRow(
+                         module: module,
+                         mediaId: mediaId,
+diff --git a/Shirox/Views/HomeView.swift b/Shirox/Views/HomeView.swift
+index 798eff4..50ee9a8 100644
+--- a/Shirox/Views/HomeView.swift
++++ b/Shirox/Views/HomeView.swift
+@@ -66,7 +66,7 @@ struct HomeView: View {
+ 
+     /// Which Home is showing — the chain's, or Simkl's for one kind. A change reloads.
+     private var homeSourceID: String {
+-        discovery.usesSimkl ? "simkl-\(discovery.simklKind.rawValue)" : "providers"
++        discovery.sourceID
+     }
+ 
+     /// The hero's titles, from whichever source Home is showing.
+@@ -87,6 +87,7 @@ struct HomeView: View {
+     /// provider menu lists them, then Simkl's Anime, Shows and Movies as its kind menu does. Nil
+     /// until there's a page.
+     private var pagePosition: Int? {
++        if discovery.usesMetadata { return ProviderType.userProviders.count + MediaKind.simklKinds.count }
+         if discovery.usesSimkl {
+             guard let kind = simkl.layout?.kind, let index = MediaKind.simklKinds.firstIndex(of: kind) else { return nil }
+             return ProviderType.userProviders.count + index
+@@ -137,7 +138,18 @@ struct HomeView: View {
+             // Like the hero: the leaving and arriving rows overlap while they turn.
+             ZStack(alignment: .topLeading) {
+                 VStack(alignment: .leading, spacing: 24) {
+-                    if discovery.usesSimkl {
++                    if discovery.usesMetadata {
++                        if !vm.topRated.isEmpty {
++                            AnimeSection(title: ModuleMetadataCatalog.topRated.title, items: vm.topRated) {
++                                MetadataCatalogView(catalog: .topRated)
++                            }
++                        }
++                        if !vm.seasonal.isEmpty {
++                            AnimeSection(title: ModuleMetadataCatalog.newest.title, items: vm.seasonal) {
++                                MetadataCatalogView(catalog: .newest)
++                            }
++                        }
++                    } else if discovery.usesSimkl {
+                         ForEach(simkl.layout?.rows ?? []) { row in
+                             AnimeSection(title: row.title, items: row.items) {
+                                 SimklListView(list: row.list)
+diff --git a/Shirox/Views/LibraryView.swift b/Shirox/Views/LibraryView.swift
+index e10d832..042e176 100644
+--- a/Shirox/Views/LibraryView.swift
++++ b/Shirox/Views/LibraryView.swift
+@@ -760,7 +760,9 @@ struct LibraryView: View {
+ 
+     @ViewBuilder
+     private func rowDestinationPage(_ entry: LibraryEntry) -> some View {
+-        if let source = entry.localSource, source.kind == .module {
++        if entry.media.moduleMetadata != nil {
++            MediaDestination(media: entry.media)
++        } else if let source = entry.localSource, source.kind == .module {
+             DetailView(
+                 item: SearchItem(
+                     title: entry.media.title.displayTitle,
 diff --git a/Shirox/Views/MetadataCatalogView.swift b/Shirox/Views/MetadataCatalogView.swift
 new file mode 100644
+index 0000000..424b772
 --- /dev/null
 +++ b/Shirox/Views/MetadataCatalogView.swift
 @@ -0,0 +1,71 @@
@@ -1876,6 +2135,7 @@ new file mode 100644
 +}
 diff --git a/Shirox/Views/MetadataDetailView.swift b/Shirox/Views/MetadataDetailView.swift
 new file mode 100644
+index 0000000..60d9f6f
 --- /dev/null
 +++ b/Shirox/Views/MetadataDetailView.swift
 @@ -0,0 +1,179 @@
@@ -1965,7 +2225,7 @@ new file mode 100644
 +        error = nil
 +        episodeError = nil
 +        defer { loading = false }
-+        guard let module = ModuleManager.shared.modules.first(where: { $0.id == identity.moduleID && $0.isMetadata }) else {
++        guard let module = ModuleManager.shared.metadataModules.first(where: { $0.id == identity.moduleID }) else {
 +            error = String(localized: "modules.metadata_unavailable")
 +            return
 +        }
@@ -2058,11 +2318,337 @@ new file mode 100644
 +        }
 +    }
 +}
+diff --git a/Shirox/Views/ModuleImportView.swift b/Shirox/Views/ModuleImportView.swift
+index 6b8bb5d..72adcbf 100644
+--- a/Shirox/Views/ModuleImportView.swift
++++ b/Shirox/Views/ModuleImportView.swift
+@@ -128,6 +128,7 @@ struct ModuleImportView: View {
+                 Picker("settings.type", selection: $kind) {
+                     Text("common.anime").tag("anime")
+                     Text("common.manga").tag("manga")
++                    Text("modules.metadata_source").tag("metadata")
+                 }
+                 TextField("modules.language_e_g_english", text: $language)
+                 urlField(String(localized: "modules.website"), text: $baseUrl)
+@@ -279,7 +280,7 @@ struct ModuleImportView: View {
+         authorIcon = module.author?.icon ?? ""
+         iconURL = module.iconUrl ?? ""
+         if let data = module.iconData.flatMap({ Data(base64Encoded: $0) }) { iconData = data }
+-        kind = module.isManga ? "manga" : "anime"
++        kind = module.isMetadata ? "metadata" : module.isManga ? "manga" : "anime"
+         language = module.language ?? ""
+         baseUrl = module.baseUrl ?? ""
+         searchBaseUrl = module.searchBaseUrl ?? ""
+diff --git a/Shirox/Views/ModuleListView.swift b/Shirox/Views/ModuleListView.swift
+index 7960d57..7b9e1a8 100644
+--- a/Shirox/Views/ModuleListView.swift
++++ b/Shirox/Views/ModuleListView.swift
+@@ -36,6 +36,10 @@ struct ModuleListView: View {
+     private let localFilesModuleURL = "https://raw.githubusercontent.com/xibrox/local-files-module/refs/heads/main/local.json"
+     private let jellyfinModuleURL = "https://raw.githubusercontent.com/xibrox/jellyfin-module/refs/heads/main/jellyfin.json"
+ 
++    private var installedModules: [ModuleDefinition] {
++        moduleManager.modules.filter { $0.id != BuiltInMetadataModules.bangumiID }
++    }
++
+     var body: some View {
+         List {
+                 addModuleSection
+@@ -91,6 +95,11 @@ struct ModuleListView: View {
+                             .listRowInsets(EdgeInsets())
+                             .listRowBackground(Color.clear)
+                     }
++                    if let bangumi = BuiltInMetadataModules.bangumi {
++                        builtInMetadataRow(bangumi)
++                            .listRowInsets(EdgeInsets())
++                            .listRowBackground(Color.clear)
++                    }
+                     // Home and Search from Simkl — offered while signed in, as its search needs the account.
+                     if simklAuth.isLoggedIn {
+                         builtInProviderRow(.simkl)
+@@ -98,12 +107,12 @@ struct ModuleListView: View {
+                             .listRowBackground(Color.clear)
+                     }
+ 
+-                    if moduleManager.modules.isEmpty {
++                    if installedModules.isEmpty {
+                         emptyModulesView
+                             .listRowInsets(EdgeInsets())
+                             .listRowBackground(Color.clear)
+                     } else {
+-                        ForEach(moduleManager.modules) { module in
++                        ForEach(installedModules) { module in
+                             moduleRow(module)
+                                 .listRowInsets(EdgeInsets())
+                                 .listRowBackground(Color.clear)
+@@ -517,12 +526,51 @@ struct ModuleListView: View {
+         .padding(.vertical, 4)
+     }
+ 
++    private func builtInMetadataRow(_ module: ModuleDefinition) -> some View {
++        let selected = discovery.usesMetadata && discovery.metadataModuleID == module.id
++        return Button {
++            discovery.chooseMetadataModule(module)
++            #if os(iOS)
++            UIImpactFeedbackGenerator(style: .light).impactOccurred()
++            #endif
++        } label: {
++            HStack(spacing: 14) {
++                Text(verbatim: "B")
++                    .font(.title2.bold())
++                    .foregroundStyle(.white)
++                    .frame(width: 44, height: 44)
++                    .background(Color.pink, in: RoundedRectangle(cornerRadius: 10))
++                VStack(alignment: .leading, spacing: 2) {
++                    Text(module.sourceName).font(.headline)
++                    Text("modules.built_in_anime_metadata")
++                        .font(.caption)
++                        .foregroundStyle(.secondary)
++                }
++                Spacer()
++                if selected {
++                    IconView("checkmark.circle.fill")
++                        .foregroundStyle(Color.primary)
++                        .font(.title3)
++                }
++            }
++            .padding(.horizontal, 16)
++            .padding(.vertical, 12)
++            .frame(maxWidth: .infinity, alignment: .leading)
++            .contentShape(Rectangle())
++            .background(
++                selected ? Color.primary.opacity(0.08) : Color.black.opacity(0.001),
++                in: RoundedRectangle(cornerRadius: 12)
++            )
++        }
++        .buttonStyle(.plain)
++    }
++
+     // MARK: - Built-in Provider Row
+     private func builtInProviderRow(_ type: ProviderType) -> some View {
+         // Simkl is the Home and Search source beside the AniList/MAL chain, not a link in it.
+         let isChosen = type == .simkl
+             ? discovery.usesSimkl
+-            : !discovery.usesSimkl && providerManager.orderedProviders.first?.providerType == type
++            : !discovery.usesSimkl && !discovery.usesMetadata && providerManager.orderedProviders.first?.providerType == type
+         let isSelected = moduleManager.activeModule == nil
+         let isDown = isChosen && type != .simkl && providerManager.fallbackActive
+ 
+@@ -600,7 +648,9 @@ struct ModuleListView: View {
+ 
+     // MARK: - Module Row
+     private func moduleRow(_ module: ModuleDefinition) -> some View {
+-        let isActive = moduleManager.activeModule?.id == module.id
++        let isActive = module.isMetadata
++            ? discovery.usesMetadata && discovery.metadataModuleID == module.id
++            : moduleManager.activeModule?.id == module.id
+         return Button {
+             if !isActive {
+                 moduleManager.selectModule(module)
+@@ -621,6 +671,9 @@ struct ModuleListView: View {
+                     Text(module.sourceName).font(.headline)
+                     HStack(spacing: 6) {
+                         Text("v\(module.version)").font(.caption).foregroundStyle(.secondary)
++                        if module.isMetadata {
++                            Text("modules.metadata_source").font(.caption).foregroundStyle(.secondary)
++                        }
+                         if let author = module.author, !author.name.isEmpty {
+                             Text("·").font(.caption).foregroundStyle(.secondary)
+                             Text(author.name).font(.caption).foregroundStyle(.secondary)
+diff --git a/Shirox/Views/ModuleStreamPickerView.swift b/Shirox/Views/ModuleStreamPickerView.swift
+index 5756828..906fb4e 100644
+--- a/Shirox/Views/ModuleStreamPickerView.swift
++++ b/Shirox/Views/ModuleStreamPickerView.swift
+@@ -40,7 +40,7 @@ struct ModuleStreamPickerView: View {
+         if useDefaultExtension, let active = moduleManager.activeModule {
+             return [active]
+         }
+-        return moduleManager.modules
++        return moduleManager.modules.filter { !$0.isMetadata }
+     }
+ 
+     var body: some View {
+diff --git a/Shirox/Views/SearchView.swift b/Shirox/Views/SearchView.swift
+index 30f9ab7..d47c70b 100644
+--- a/Shirox/Views/SearchView.swift
++++ b/Shirox/Views/SearchView.swift
+@@ -30,7 +30,7 @@ struct SearchView: View {
+     @State private var pendingVideoURL: URL?
+     @State private var pendingVideoTitle: String?
+ 
+-    private var isLocalModule: Bool { moduleManager.activeModule?.isLocalPlayback == true }
++    private var isLocalModule: Bool { !discovery.usesMetadata && moduleManager.activeModule?.isLocalPlayback == true }
+ 
+     private var usesToolbarSearch: Bool {
+         #if os(macOS)
+@@ -39,7 +39,7 @@ struct SearchView: View {
+         false
+         #endif
+     }
+-    private var isJellyfinModule: Bool { moduleManager.activeModule?.isJellyfin == true }
++    private var isJellyfinModule: Bool { !discovery.usesMetadata && moduleManager.activeModule?.isJellyfin == true }
+ 
+     private var platformBackground: Color {
+         #if os(iOS)
+@@ -68,7 +68,7 @@ struct SearchView: View {
+         #endif
+     }
+ 
+-    private var usingModule: Bool { moduleManager.activeModule != nil }
++    private var usingModule: Bool { !discovery.usesMetadata && moduleManager.activeModule != nil }
+     private var primaryProvider: ProviderType { providerManager.orderedProviders.first?.providerType ?? .anilist }
+     /// What Search draws on without a module: Simkl when chosen, else the chain's first.
+     private var shownProvider: ProviderType { discovery.usesSimkl ? .simkl : primaryProvider }
+@@ -110,7 +110,7 @@ struct SearchView: View {
+                     }
+                 }
+                 .onChangeOf(moduleManager.moduleReadyId) { newId in
+-                    guard !vm.query.isEmpty, newId != nil else { return }
++                    guard !discovery.usesMetadata, !vm.query.isEmpty, newId != nil else { return }
+                     vm.search(usingModule: true)
+                 }
+                 .onChangeOf(moduleManager.activeModule) { newModule in
+@@ -125,6 +125,10 @@ struct SearchView: View {
+                     guard !vm.query.isEmpty, !usingModule else { return }
+                     vm.search(usingModule: false)
+                 }
++                .onChangeOf(discovery.sourceID) { _ in
++                    guard !vm.query.isEmpty else { return }
++                    vm.search(usingModule: usingModule)
++                }
+         }
+         .adaptiveSheet(isPresented: $showModuleList) {
+             NavigationStack {
+@@ -164,7 +168,9 @@ struct SearchView: View {
+                 // Nothing typed yet: give people somewhere to go, with any recent searches
+                 // carried along at the top. Recents used to be a full-height list of their own,
+                 // which meant one previous search hid browsing entirely.
+-                if discovery.usesSimkl {
++                if discovery.usesMetadata {
++                    MetadataCatalogView(catalog: .topRated)
++                } else if discovery.usesSimkl {
+                     SimklBrowseView(
+                         columns: columns,
+                         recentSearches: history.queries,
+@@ -365,7 +371,7 @@ struct SearchView: View {
+                 if !vm.aniListResults.isEmpty {
+                     ForEach(vm.aniListResults) { media in
+                         NavigationLink {
+-                            AniListDetailView(mediaId: media.id, preloadedMedia: media)
++                            MediaDestination(media: media)
+                         } label: {
+                             AniListCardView(media: media)
+                         }
+@@ -528,7 +534,9 @@ struct SearchView: View {
+             HStack(spacing: 6) {
+                 // Icon container (rounded)
+                 Group {
+-                    if usingModule {
++                    if discovery.usesMetadata {
++                        fallbackIcon
++                    } else if usingModule {
+                         if let iconUrlString = moduleManager.activeModule?.iconUrl, !iconUrlString.isEmpty {
+                             CachedAsyncImage(urlString: iconUrlString)
+                         } else {
+@@ -549,7 +557,9 @@ struct SearchView: View {
+ 
+                 // Text label
+                 if buttonStyle != .iconOnly {
+-                    Text(usingModule ? (moduleManager.activeModule?.sourceName ?? String(localized: "modules.module")) : shownProvider.displayName)
++                    Text(discovery.usesMetadata
++                         ? (discovery.metadataModule?.sourceName ?? String(localized: "modules.metadata_source"))
++                         : usingModule ? (moduleManager.activeModule?.sourceName ?? String(localized: "modules.module")) : shownProvider.displayName)
+                         .font(.callout)
+                         .fontWeight(.medium)
+                         // A toolbar item takes whatever width it asks for, so a long module name
+diff --git a/Shirox/Views/Shared/MediaDestination.swift b/Shirox/Views/Shared/MediaDestination.swift
+index a174f7c..72402ae 100644
+--- a/Shirox/Views/Shared/MediaDestination.swift
++++ b/Shirox/Views/Shared/MediaDestination.swift
+@@ -5,17 +5,21 @@ struct MediaDestination: View {
+     let media: Media
+ 
+     enum Target: Equatable {
++        case metadata(ModuleMetadataIdentity)
+         case simklTitle(simklID: Int, kind: MediaKind)
+         case anime(id: Int)
+     }
+ 
+     static func target(for media: Media) -> Target {
++        if let identity = media.moduleMetadata { return .metadata(identity) }
+         if let kind = media.simklTitleKind { return .simklTitle(simklID: media.id, kind: kind) }
+         return .anime(id: media.id)
+     }
+ 
+     var body: some View {
+         switch Self.target(for: media) {
++        case .metadata(let identity):
++            MetadataDetailView(identity: identity, seed: media)
+         case .simklTitle(let simklID, let kind):
+             SimklTitlePage(simklID: simklID, kind: kind, seedTitle: media.title.displayTitle,
+                            seedPosterURL: media.coverImage.large)
+diff --git a/Shirox/Views/Shared/ProviderStatusBanner.swift b/Shirox/Views/Shared/ProviderStatusBanner.swift
+index 2c419cc..987bbbf 100644
+--- a/Shirox/Views/Shared/ProviderStatusBanner.swift
++++ b/Shirox/Views/Shared/ProviderStatusBanner.swift
+@@ -117,6 +117,11 @@ struct ProviderMenuButton: View {
+     @ObservedObject private var manager = ProviderManager.shared
+     @ObservedObject private var discovery = DiscoverySource.shared
+     @ObservedObject private var simklAuth = SimklAuthManager.shared
++    @ObservedObject private var modules = ModuleManager.shared
++
++    private var sourceName: String {
++        discovery.usesMetadata ? (discovery.metadataModule?.sourceName ?? String(localized: "modules.metadata_source")) : shown.displayName
++    }
+ 
+     /// What Home and Search come from: Simkl when chosen, else the first of the chain.
+     private var shown: ProviderType {
+@@ -182,10 +187,15 @@ struct ProviderMenuButton: View {
+             if simklAuth.isLoggedIn {
+                 Button { discovery.chooseSimkl() } label: { label(.simkl) }
+             }
++            ForEach(modules.metadataModules) { module in
++                Button { discovery.chooseMetadataModule(module) } label: { Text(module.sourceName) }
++            }
+         } label: {
+             #if os(macOS)
+-            let providerLabel = Label { Text(shown.displayName) } icon: {
+-                cachedIcon(shown) ?? Image(icon: "sparkles.tv")
++            let providerLabel = Label { Text(sourceName) } icon: {
++                if discovery.usesMetadata { Image(icon: "puzzlepiece.extension") } else {
++                    cachedIcon(shown) ?? Image(icon: "sparkles.tv")
++                }
+             }
+             if style == .iconOnly {
+                 providerLabel.labelStyle(.iconOnly)
+@@ -194,12 +204,16 @@ struct ProviderMenuButton: View {
+             }
+             #else
+             HStack(spacing: 6) {
+-                CachedAsyncImage(urlString: shown.iconURL)
+-                    .frame(width: 20, height: 20)
+-                    .background(shown == .simkl ? Color.white : Color.clear)
+-                    .clipShape(RoundedRectangle(cornerRadius: 5))
++                if discovery.usesMetadata {
++                    IconView("puzzlepiece.extension").frame(width: 20, height: 20)
++                } else {
++                    CachedAsyncImage(urlString: shown.iconURL)
++                        .frame(width: 20, height: 20)
++                        .background(shown == .simkl ? Color.white : Color.clear)
++                        .clipShape(RoundedRectangle(cornerRadius: 5))
++                }
+                 if style != .iconOnly {
+-                    Text(shown.displayName)
++                    Text(sourceName)
+                         .font(.subheadline.weight(.semibold))
+                 }
+                 IconView("chevron.down").font(.caption2)
 diff --git a/ShiroxTests/MetadataModuleTests.swift b/ShiroxTests/MetadataModuleTests.swift
 new file mode 100644
+index 0000000..b0a16fe
 --- /dev/null
 +++ b/ShiroxTests/MetadataModuleTests.swift
-@@ -0,0 +1,80 @@
+@@ -0,0 +1,124 @@
 +import XCTest
 +@testable import Shirox
 +
@@ -2083,6 +2669,50 @@ new file mode 100644
 +        try JSONDecoder().decode(ModuleDefinition.self, from: Data("""
 +        {"sourceName":"Metadata","version":"0.3.0","scriptUrl":"https://example.com/metadata.js","type":"\(type)"}
 +        """.utf8))
++    }
++
++    func testBangumiIsBundledAndAvailableWithoutInstalledModules() throws {
++        let bundled = try BuiltInMetadataModules.loadBangumi(from: .main)
++        XCTAssertEqual(bundled.id, BuiltInMetadataModules.bangumiID)
++        XCTAssertEqual(bundled.sourceName, "Bangumi")
++        XCTAssertTrue(bundled.isMetadata)
++        XCTAssertFalse(bundled.isAnimePlayback)
++        let script = try XCTUnwrap(bundled.scriptContent)
++        XCTAssertTrue(script.contains("async function searchMetadata"))
++        XCTAssertTrue(script.contains("async function extractMetadata"))
++        XCTAssertTrue(script.contains("async function extractEpisodeMetadata"))
++        XCTAssertTrue(script.contains("async function browseMetadata"))
++        XCTAssertEqual(BuiltInMetadataModules.merging([]).map(\.id), [bundled.id])
++    }
++
++    func testLegacyBangumiUsesBundledMetadataAndDoesNotDuplicateItsSource() throws {
++        let legacy = try JSONDecoder().decode(ModuleDefinition.self, from: Data("""
++        {"sourceName":"Old Bangumi","version":"0.2.0","scriptUrl":"\(BuiltInMetadataModules.bangumiID)","type":"anime"}
++        """.utf8))
++        XCTAssertTrue(legacy.isMetadata)
++        XCTAssertFalse(legacy.isAnimePlayback)
++        let external = try module()
++        let sources = BuiltInMetadataModules.merging([legacy, external])
++        XCTAssertEqual(sources.map(\.id), [legacy.id, external.id])
++        XCTAssertEqual(sources.first?.sourceName, "Bangumi")
++        XCTAssertEqual(sources.first?.version, "0.3.0")
++    }
++
++    func testBuiltInChoiceSurvivesProfileReloadWithoutAUserInstalledModule() throws {
++        let suite = "metadata-builtin-\(UUID().uuidString)"
++        let defaults = try XCTUnwrap(UserDefaults(suiteName: suite))
++        defer { defaults.removePersistentDomain(forName: suite) }
++        let source = DiscoverySource(defaults: defaults, selectProvider: { _ in })
++        source.chooseMetadataModule(try XCTUnwrap(BuiltInMetadataModules.bangumi))
++        XCTAssertTrue(source.usesMetadata)
++        XCTAssertEqual(source.metadataModule?.sourceName, "Bangumi")
++        source.chooseProvider(.anilist)
++        source.reloadForProfileSwitch()
++        XCTAssertFalse(source.usesMetadata)
++        defaults.set("metadata", forKey: DiscoverySource.choiceKey)
++        source.reloadForProfileSwitch()
++        XCTAssertTrue(source.usesMetadata)
++        XCTAssertEqual(source.metadataModuleID, BuiltInMetadataModules.bangumiID)
 +    }
 +
 +    func testMetadataIsNotAMangaOrPlaybackModule() throws {
@@ -2143,30 +2773,11 @@ new file mode 100644
 +        }
 +    }
 +}
-diff --git a/docs/BANGUMI.md b/docs/BANGUMI.md
-new file mode 100644
---- /dev/null
-+++ b/docs/BANGUMI.md
-@@ -0,0 +1,15 @@
-+# Bangumi metadata modules
-+
-+This change adds type: metadata modules to Home, Search and title details, separately from playback.
-+
-+Use a build with this patch, then import https://raw.githubusercontent.com/quiteQa/shirox-bangumi/main/bangumi.json . Refresh an older installed module to version 0.3.0 and run Check Again. Metadata health checks call searchMetadata and extractMetadata, never video streams.
-+
-+Select Bangumi in Modules or the Home source menu. Home displays score ranking and premiere-date catalogs. Title details display native metadata and can be saved to the local library. Find a playback source searches installed website modules; the user confirms the matching title. Playback and downloads remain on that website module.
-+
-+Bangumi IDs remain in a namespaced identity and are not sent as AniList/MAL IDs. Metadata reading uses a separate JS runner. New settings participate in backups and profile switching.
-+
-+The contract consists of searchMetadata(keyword), extractMetadata(subjectID), extractEpisodeMetadata(subjectID), and browseMetadata(topRated or newest, page), returning JSON strings documented in the module repository.
-+
-+MetadataModuleTests covers classification, score conversion, namespaced IDs, persistence, routing, and health checks that must not request a stream. New files are registered for iOS, macOS, tvOS and the iOS test target; Catalyst uses the iOS target. UI strings cover all 13 languages.
-+
-+The Linux development environment checked Swift syntax, localization, icons and project structure. Xcode builds and real-device tests are still required before distributing a binary. A syntax parse is not a compiler check.
 diff --git a/ShiroxTests/TSAudioTimestampsTests.swift b/ShiroxTests/TSAudioTimestampsTests.swift
+index e8a5b67..334b65c 100644
 --- a/ShiroxTests/TSAudioTimestampsTests.swift
 +++ b/ShiroxTests/TSAudioTimestampsTests.swift
-@@ -82,7 +82,11 @@
+@@ -82,7 +82,11 @@ final class TSAudioTimestampsTests: XCTestCase {
      }
  
      func testAnEvenSegmentIsLeftAlone() {
@@ -2179,3 +2790,32 @@ diff --git a/ShiroxTests/TSAudioTimestampsTests.swift b/ShiroxTests/TSAudioTimes
          XCTAssertNil(TSAudioTimestamps.repair(segment(pts: stamps)))
      }
  
+diff --git a/docs/BANGUMI.md b/docs/BANGUMI.md
+new file mode 100644
+index 0000000..b4b1b58
+--- /dev/null
++++ b/docs/BANGUMI.md
+@@ -0,0 +1,23 @@
++# Built-in Bangumi metadata
++
++Bangumi ships inside this fork as an animation metadata source, alongside AniList and MyAnimeList. Install a build of this fork, then select **Bangumi** in Settings → Modules or the Home source menu. No module URL, script download or Bangumi account is required. Metadata and artwork still need network access to Bangumi.
++
++The bundled `Shirox/Resources/Bangumi.json` and `Bangumi.js` are copied into every app target, including iOS, macOS, tvOS and Catalyst. A separate JavaScript runner reads them directly from the app bundle. Updating the bundled source requires an app update; refreshing imported modules does not replace its code. A missing bundled resource produces an error instead of fetching a script remotely.
++
++Home provides score ranking and premiere-date catalogs. Search and title details provide titles, cover art, synopsis, ratings, tags, studios, directors and episodes. A metadata health check never requests a video stream. To watch a title, choose a matching title from an installed playback module using the detail page's playback-source picker.
++
++## Upgrading from the imported module
++
++The built-in source retains the previous Bangumi module identity. Existing source selection and bookmarked metadata titles continue to work. An imported copy is hidden from the source list, and metadata reads always use the bundled version. Older Bangumi modules are classified as metadata even if their manifest used a playback type, so they cannot be selected for streaming or downloads. Other imported metadata modules remain available.
++
++The built-in source is kept separately from user-installed modules. Removing imported modules, restoring backups and switching profiles do not remove the bundled source. Source selection remains a per-profile preference. Bangumi IDs stay namespaced and are not sent as AniList or MyAnimeList IDs.
++
++## Source and validation
++
++The fork starts at upstream commit `398d36715b34a17ec68bfd52d792f7a2e7db06f5`. The complete patch and build workflow are maintained in [quiteQa/shirox-bangumi](https://github.com/quiteQa/shirox-bangumi/tree/main/native).
++
++The earlier imported-module integration passed all four app builds and iOS test-target compilation in [run 40844088237](https://github.com/quiteQa/shirox-bangumi/actions/runs/40844088237). That run's IPA predates the built-in resources and still requires module import. Use a newer successful [metadata build](https://github.com/quiteQa/shirox-bangumi/actions/workflows/shirox-metadata-build.yml) for this version, and download its `metadata-Shirox_iOS` artifact. Unzip and sign `Shirox-metadata-unsigned.ipa` with your own sideloading method. Artifacts require a GitHub login and expire according to retention settings.
++
++The workflow runs the module's 31 offline JavaScript tests, checks localization and icons, builds all four app schemes, compiles iOS tests without starting a simulator, and verifies both Bangumi resources exist in the packaged iOS app. `MetadataModuleTests` additionally covers bundle loading, legacy-module classification, duplicate suppression and source selection after a profile reload.
++
++XCTest has not been executed and real-device behavior has not been verified. Existing libzstd module-import and AppIntents metadata warnings remain. The upstream `TSAudioTimestampsTests` expression is split into intermediate values to avoid a type-check timeout without changing its behavior.

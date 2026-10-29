@@ -1,22 +1,27 @@
-# Shirox 元数据模块接入
+# Shirox 内置 Bangumi 动画元数据
 
-[修改后的完整 Shirox 源码](https://github.com/quiteQa/Shirox)已推送至公开 Fork，提交 [27ae1c8](https://github.com/quiteQa/Shirox/commit/27ae1c828759583854e016ce1a7fb7b32b6dcbb1)。直接克隆该 Fork 即已包含修改，无需再应用补丁。
+完整 App 源码：[quiteQa/Shirox](https://github.com/quiteQa/Shirox)，内置接入提交 [50b3167](https://github.com/quiteQa/Shirox/commit/50b31671a002842708427de05fbb68098f6ce016)。直接克隆 Fork 即可构建，无需手动应用补丁。
 
-[完整源码补丁](shirox-metadata.patch)，基于 xibrox/Shirox 的提交 `398d36715b34a17ec68bfd52d792f7a2e7db06f5`。
+## 使用
 
-## 修改后的行为
+安装含内置资源的修改版后，在模块页或首页来源菜单直接选择 **Bangumi**。无需模块 URL，无需下载 JavaScript，也无需 Bangumi 账号；读取公开元数据和封面仍需联网。
 
-- 元数据模块与动画播放模块分开选择；元数据检查不再获取视频流。
-- 首页提供评分排行和最新首播，搜索与详情读取结构化元数据。
-- 标题、封面、简介、评分、标签、导演、制作公司和剧集信息由模块提供。
-- Bangumi ID 使用来源隔离的本地身份，不当作 AniList/MAL ID。
-- 元数据卡片可存入本机资料库，再次打开仍进入元数据详情。
-- “选择播放源”搜索安装的网站播放模块，由用户确认匹配结果。
-- 选择元数据来源不会将其载入共享的播放 JavaScript 上下文，也不会将它列入下载源。
+- 首页提供评分排行和最新首播；搜索、详情和剧集读取 Bangumi 元数据。
+- 模块页固定显示“Bangumi · 内置动画元数据”，与 AniList、MyAnimeList 一起选择。
+- 配置与脚本随 App 打包到全部平台；刷新外部模块不会替换内置脚本。
+- 保留旧 Bangumi 模块身份，兼容已有来源选择和收藏；旧导入副本不会重复显示。
+- 元数据不进入播放、下载源列表。详情页可另选已安装的播放模块。
+- 缺失资源会报告错误，不会回退到远程下载脚本。
 
-## 应用补丁
+## 构建与安装
 
-在 Mac 上准备上游所需的 Xcode 环境：
+[最新构建](https://github.com/quiteQa/shirox-bangumi/actions/workflows/shirox-metadata-build.yml) · [SwiftLint](https://github.com/quiteQa/shirox-bangumi/actions/workflows/shirox-metadata-lint.yml)
+
+下载最新成功构建的 `metadata-Shirox_iOS` 产物，解压后自行签名安装 `Shirox-metadata-unsigned.ipa`。GitHub 产物下载需要登录，且有保留期限。旧的构建 40844088237 尚未内置资源，仍需手动导入模块。
+
+## 完整补丁
+
+[shirox-metadata.patch](shirox-metadata.patch) 基于上游 `398d36715b34a17ec68bfd52d792f7a2e7db06f5`，包含元数据宿主适配和内置资源。仅在上游原始源码上应用一次，不要对已经修改的 Fork 再次应用。
 
 ```bash
 git clone https://github.com/xibrox/Shirox.git
@@ -27,28 +32,10 @@ git apply /path/to/shirox-metadata.patch
 open Shirox.xcodeproj
 ```
 
-请将补丁路径换成本机真实路径。构建、签名遵循上游 BUILDING.txt 和 CLAUDE.md。安装修改后的 App 后，添加：
+构建、签名遵循上游 BUILDING.txt 和 CLAUDE.md。内置脚本是本仓库的 0.3.0 版本；更新脚本需更新 App。
 
-```text
-https://raw.githubusercontent.com/quiteQa/shirox-bangumi/main/bangumi.json
-```
+## 验证
 
-旧版模块先刷新至 0.3.0，再重新检查，然后选择 Bangumi 作为元数据来源。
+内置脚本的 31 项离线 JavaScript 测试通过；Swift 语法、本地化、图标与资源登记检查通过。构建工作流验证四个平台、编译 iOS 测试目标，并检查生成的 IPA 内含配置和脚本且与源码一致。原生测试新增了资源读取、旧版本迁移、去重与配置切换覆盖。
 
-## 验证状态
-
-插件 31 项测试及真实只读 API 测试通过，包括 28 集正片及两个各 25 项的目录。
-原生源码在 Linux 环境完成了 Swift 语法、本地化、图标及工程结构检查；这些检查不等于 Xcode 编译或真机验证。
-已提供 MetadataModuleTests，但本机没有 Xcode，尚未执行原生 XCTest。
-
-提供 macOS 构建工作流验证四个 scheme，并在不启动模拟器的情况下编译测试目标。只有实际 Actions 构建成功后才会生成需要自行签名的 IPA。
-
-## 已验证的构建
-
-[严格构建记录](https://github.com/quiteQa/shirox-bangumi/actions/runs/40844088237) · [SwiftLint 记录](https://github.com/quiteQa/shirox-bangumi/actions/runs/40844088197)
-
-iOS、macOS、tvOS、Mac Catalyst 四个 App 构建通过；iOS 测试目标的 arm64 模拟器版本编译通过。测试没有执行，也没有进行真机验证。上游依赖的 libzstd / AppIntents 构建警告仍可见。
-
-[下载 iOS 构建产物](https://github.com/quiteQa/shirox-bangumi/actions/runs/40844088237/artifacts/12883669458)，解压后得到未签名的 Shirox-metadata-unsigned.ipa，需用自己的签名方式安装。随后在 App 的模块页刷新 Bangumi 到 0.3.0 并重新检查。
-
-补丁还拆分了一处上游 TSAudioTimestampsTests 的复杂表达式，保持测试含义不变，以解决 Xcode 类型检查超时。CI 显式启用 bash pipefail，避免输出到日志的管道掩盖编译失败。
+XCTest 没有执行，尚未真机验证。上游 libzstd / AppIntents 构建警告仍可能存在。CI 使用 bash pipefail，避免日志管道掩盖编译失败。

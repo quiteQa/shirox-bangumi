@@ -51,5 +51,20 @@
     "unsigned_ios_artifact": "https://github.com/quiteQa/shirox-bangumi/actions/runs/40844088237/artifacts/12883669458",
     "warnings": "upstream libzstd module-import and AppIntents metadata warnings remain",
     "real_device_validation": "not performed"
+  },
+  "builtin_bangumi": {
+    "fork": "quiteQa/Shirox",
+    "source_commit": "50b31671a002842708427de05fbb68098f6ce016",
+    "bundled_resources": [
+      "Bangumi.json",
+      "Bangumi.js"
+    ],
+    "requires_import": false,
+    "requires_login": false,
+    "network_metadata": true,
+    "offline_tests_passed": 31,
+    "resource_registration": "verified exactly once in each app target",
+    "xcode_build": "pending latest workflow",
+    "xctest_execution": "not run"
   }
 }

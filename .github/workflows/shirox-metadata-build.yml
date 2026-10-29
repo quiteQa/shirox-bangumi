@@ -34,6 +34,7 @@ jobs:
           npm test
           git -C Shirox apply --check ../native/shirox-metadata.patch
           git -C Shirox apply ../native/shirox-metadata.patch
+          cmp bangumi.js Shirox/Shirox/Resources/Bangumi.js
           python3 Shirox/scripts/i18n/i18n.py check
           python3 Shirox/scripts/icons/icons.py check
   build:
@@ -90,6 +91,10 @@ jobs:
         run: |
           mkdir -p Payload
           cp -R build/Build/Products/Debug-iphoneos/Shirox.app Payload/
+          test -s Payload/Shirox.app/Bangumi.json
+          test -s Payload/Shirox.app/Bangumi.js
+          cmp Shirox/Shirox/Resources/Bangumi.json Payload/Shirox.app/Bangumi.json
+          cmp Shirox/Shirox/Resources/Bangumi.js Payload/Shirox.app/Bangumi.js
           ditto -c -k --keepParent Payload Shirox-metadata-unsigned.ipa
       - uses: actions/upload-artifact@v4
         if: always()

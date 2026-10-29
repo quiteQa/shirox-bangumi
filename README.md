@@ -6,9 +6,7 @@
 
 **0.3.0 使用 `type: "metadata"`，需要支持元数据模块的 Shirox 构建。** 本仓库提供完整的 [Shirox 源码补丁](native/shirox-metadata.patch)，接入首页、搜索、详情、元数据健康检查及独立播放源选择。原版 Shirox 会将此类模块当成播放源并报告没有串流，仅更新插件不能修复这个宿主限制。
 
-四个平台的 App 构建和 iOS 测试目标编译已经通过：[构建记录](https://github.com/quiteQa/shirox-bangumi/actions/runs/40844088237) · [下载未签名 iOS 构建](https://github.com/quiteQa/shirox-bangumi/actions/runs/40844088237/artifacts/12883669458)。下载并解压产物后，使用自己的签名方式安装其中的 `Shirox-metadata-unsigned.ipa`。源码与安装步骤见 [native/README.md](native/README.md)，本脚本也可独立调用。
-
-完整 App 源码现已推送至公开 Fork：[quiteQa/Shirox](https://github.com/quiteQa/Shirox)。直接克隆该 Fork 即可构建，无需手动应用补丁。
+**App 已内置 Bangumi**：[完整源码](https://github.com/quiteQa/Shirox) · [最新构建与安装说明](native/README.md)。安装内置版后，直接在来源列表选择 Bangumi，不需要再导入本仓库的模块 URL。旧构建 40844088237 尚未内置资源。
 
 ## 直接调用元数据接口
 
@@ -59,7 +57,7 @@ async function readFromBridge() {
 https://raw.githubusercontent.com/quiteQa/shirox-bangumi/main/bangumi.json
 ```
 
-先安装应用了元数据补丁的 Shirox，再添加此链接。已安装旧版 Bangumi 模块时，点击模块页的刷新按钮，确认更新至 0.3.0，再运行“重新检查”。修改后的健康检查只读取元数据，不请求视频流。
+最新的内置版 Shirox 无需此步骤。为其他支持元数据模块的宿主安装独立脚本时，可添加此链接。已安装旧版 Bangumi 模块时，点击模块页的刷新按钮，确认更新至 0.3.0，再运行“重新检查”。修改后的健康检查只读取元数据，不请求视频流。
 
 当前 Shirox 普通模块只会调用以下兼容入口：
 
@@ -132,7 +130,7 @@ npm run test:live
 
 31 项离线测试覆盖元数据字段、评分量纲、日期与缺失值、两种剧集编号、目录分页、搜索摘要、兼容入口、错误处理及模拟写入。联网测试只读取公开 API，验证《葬送的芙莉莲》及其 28 集正片、评分排行和最新首播目录。
 
-JavaScript 的 31 项测试及真实只读 API 测试通过。配套源码补丁已在 GitHub macOS runner 上通过 iOS、macOS、tvOS、Mac Catalyst 构建，iOS 测试目标的 arm64 模拟器版本编译通过，SwiftLint、本地化与图标检查通过。原生 XCTest 没有执行，也尚未做真机运行验证。原生集成不增加账号追踪服务，不向 AniList/MAL 发送 Bangumi ID。
+JavaScript 的 31 项测试及此前的真实只读 API 测试通过。此前的宿主适配已通过四平台构建、iOS 测试目标编译和 SwiftLint；内置资源版本的最新构建状态见 [构建说明](native/README.md)。原生 XCTest 没有执行，也尚未做真机运行验证。原生集成不增加账号追踪服务，不向 AniList/MAL 发送 Bangumi ID。
 
 ## 接口依据
 
