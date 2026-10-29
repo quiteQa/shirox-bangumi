@@ -1,5 +1,7 @@
 # Shirox 元数据模块接入
 
+[修改后的完整 Shirox 源码](https://github.com/quiteQa/Shirox)已推送至公开 Fork，提交 [27ae1c8](https://github.com/quiteQa/Shirox/commit/27ae1c828759583854e016ce1a7fb7b32b6dcbb1)。直接克隆该 Fork 即已包含修改，无需再应用补丁。
+
 [完整源码补丁](shirox-metadata.patch)，基于 xibrox/Shirox 的提交 `398d36715b34a17ec68bfd52d792f7a2e7db06f5`。
 
 ## 修改后的行为
