@@ -3,7 +3,7 @@
   "version": "0.1.0",
   "baseUrl": "https://bgm.tv",
   "searchBaseUrl": "https://bgm.tv/subject_search/%s?cat=2",
-  "scriptUrl": "bangumi.js",
+  "scriptUrl": "https://raw.githubusercontent.com/quiteQa/shirox-bangumi/main/bangumi.js",
   "type": "anime",
   "language": "中文 / 日本語",
   "asyncJS": true,
