@@ -12,6 +12,10 @@ on:
 permissions:
   contents: read
 
+defaults:
+  run:
+    shell: bash
+
 jobs:
   check:
     runs-on: ubuntu-latest
@@ -80,7 +84,7 @@ jobs:
             -destination 'generic/platform=iOS Simulator' \
             -configuration Debug -derivedDataPath test-build \
             -skipPackagePluginValidation CODE_SIGNING_ALLOWED=NO \
-            build-for-testing 2>&1 | tee xcode-tests.log
+            ONLY_ACTIVE_ARCH=YES ARCHS=arm64 build-for-testing 2>&1 | tee xcode-tests.log
       - name: Package unsigned iOS app
         if: matrix.scheme == 'Shirox_iOS'
         run: |

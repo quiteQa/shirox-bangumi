@@ -1706,7 +1706,7 @@ new file mode 100644
 +        let key = "metadata|\(moduleID)|\(source)|\(id)"
 +        var result = Media(
 +            id: Media.localId(forKey: key), idMal: nil, provider: .local,
-+            title: MediaTitle(romaji: titles.original, english: title, native: titles.chinese),
++            title: MediaTitle(romaji: nil, english: title, native: titles.original),
 +            coverImage: MediaCoverImage(large: poster, extraLarge: poster), bannerImage: nil,
 +            description: description, episodes: episodeCount, status: nil,
 +            averageScore: rating.scoreOutOf100, genres: nil, season: nil, seasonYear: year,
@@ -2062,7 +2062,7 @@ diff --git a/ShiroxTests/MetadataModuleTests.swift b/ShiroxTests/MetadataModuleT
 new file mode 100644
 --- /dev/null
 +++ b/ShiroxTests/MetadataModuleTests.swift
-@@ -0,0 +1,78 @@
+@@ -0,0 +1,80 @@
 +import XCTest
 +@testable import Shirox
 +
@@ -2101,6 +2101,8 @@ new file mode 100644
 +        XCTAssertEqual(media.averageScore, 85)
 +        XCTAssertEqual(media.provider, .local)
 +        XCTAssertNil(media.idMal)
++        XCTAssertNil(media.title.romaji)
++        XCTAssertEqual(media.title.native, record.titles.original)
 +        XCTAssertNil(media.genres, "community tags are not native genre names")
 +        XCTAssertFalse(media.usesTVDBArtwork)
 +        XCTAssertNotEqual(media.id, record.id, "Bangumi ids must not be used as AniList ids")
@@ -2161,3 +2163,19 @@ new file mode 100644
 +MetadataModuleTests covers classification, score conversion, namespaced IDs, persistence, routing, and health checks that must not request a stream. New files are registered for iOS, macOS, tvOS and the iOS test target; Catalyst uses the iOS target. UI strings cover all 13 languages.
 +
 +The Linux development environment checked Swift syntax, localization, icons and project structure. Xcode builds and real-device tests are still required before distributing a binary. A syntax parse is not a compiler check.
+diff --git a/ShiroxTests/TSAudioTimestampsTests.swift b/ShiroxTests/TSAudioTimestampsTests.swift
+--- a/ShiroxTests/TSAudioTimestampsTests.swift
++++ b/ShiroxTests/TSAudioTimestampsTests.swift
+@@ -82,7 +82,11 @@
+     }
+ 
+     func testAnEvenSegmentIsLeftAlone() {
+-        let stamps = (0..<6).map { 90_000 + Int64($0 * 2 * 1024) * 90_000 / 44_100 }
++        let stamps: [Int64] = (0..<6).map { index -> Int64 in
++            let samples = Int64(index * 2 * 1024)
++            let ticks = samples * 90_000 / 44_100
++            return 90_000 + ticks
++        }
+         XCTAssertNil(TSAudioTimestamps.repair(segment(pts: stamps)))
+     }
+ 
