@@ -1,0 +1,12 @@
+{
+  "name": "shirox-bangumi",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Bangumi metadata module and tracking API client for Shirox",
+  "scripts": {
+    "test": "node test/bangumi.test.cjs",
+    "test:live": "node test/live.cjs",
+    "package": "node tools/package.cjs"
+  },
+  "engines": { "node": ">=18" }
+}

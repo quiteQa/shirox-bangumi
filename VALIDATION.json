@@ -1,0 +1,25 @@
+{
+  "date": "2026-10-29",
+  "module_version": "0.1.0",
+  "offline_tests": { "passed": 23, "failed": 0 },
+  "live_api": {
+    "search": "passed",
+    "subject_id": 400602,
+    "title": "葬送的芙莉莲",
+    "airdate": "2023-09-29",
+    "episodes": 28,
+    "first_episode": 1,
+    "last_episode": 28,
+    "public_collections": "passed",
+    "authenticated_writes": "not tested; mocked only"
+  },
+  "packaging": {
+    "https_manifest_and_script": "passed",
+    "reject_script_with_credentials": "passed"
+  },
+  "native_shirox": {
+    "ios_macos_runtime": "not tested",
+    "automatic_tracking_integration": "not implemented",
+    "video_playback": "not supported by bgm.tv"
+  }
+}
