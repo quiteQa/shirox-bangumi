@@ -1,0 +1,97 @@
+name: Build Shirox metadata integration
+
+on:
+  push:
+    paths:
+      - native/**
+      - bangumi.js
+      - test/**
+      - .github/workflows/shirox-metadata-build.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/checkout@v4
+        with:
+          repository: xibrox/Shirox
+          ref: 398d36715b34a17ec68bfd52d792f7a2e7db06f5
+          path: Shirox
+          persist-credentials: false
+      - name: Test JavaScript and apply native patch
+        run: |
+          npm test
+          git -C Shirox apply --check ../native/shirox-metadata.patch
+          git -C Shirox apply ../native/shirox-metadata.patch
+          python3 Shirox/scripts/i18n/i18n.py check
+          python3 Shirox/scripts/icons/icons.py check
+  build:
+    needs: check
+    runs-on: macos-26
+    timeout-minutes: 55
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - scheme: Shirox_iOS
+            destination: generic/platform=iOS
+          - scheme: Shirox_macOS
+            destination: platform=macOS
+          - scheme: Shirox_tvOS
+            destination: generic/platform=tvOS
+          - scheme: Shirox_MacCatalyst
+            destination: generic/platform=macOS,variant=Mac Catalyst
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/checkout@v4
+        with:
+          repository: xibrox/Shirox
+          ref: 398d36715b34a17ec68bfd52d792f7a2e7db06f5
+          path: Shirox
+          persist-credentials: false
+      - name: Apply metadata source change
+        run: |
+          git -C Shirox apply --check ../native/shirox-metadata.patch
+          git -C Shirox apply ../native/shirox-metadata.patch
+          xcodebuild -version
+      - name: Build app
+        run: |
+          xcodebuild -project Shirox/Shirox.xcodeproj \
+            -scheme '${{ matrix.scheme }}' \
+            -destination '${{ matrix.destination }}' \
+            -configuration Debug -derivedDataPath build \
+            -skipPackagePluginValidation \
+            CODE_SIGN_IDENTITY='' CODE_SIGNING_REQUIRED=NO \
+            CODE_SIGN_ENTITLEMENTS='' CODE_SIGNING_ALLOWED=NO \
+            build 2>&1 | tee xcodebuild.log
+      - name: Compile tests without starting a simulator
+        if: matrix.scheme == 'Shirox_iOS'
+        run: |
+          xcodebuild -project Shirox/Shirox.xcodeproj -scheme Shirox_iOS \
+            -destination 'generic/platform=iOS Simulator' \
+            -configuration Debug -derivedDataPath test-build \
+            -skipPackagePluginValidation CODE_SIGNING_ALLOWED=NO \
+            build-for-testing 2>&1 | tee xcode-tests.log
+      - name: Package unsigned iOS app
+        if: matrix.scheme == 'Shirox_iOS'
+        run: |
+          mkdir -p Payload
+          cp -R build/Build/Products/Debug-iphoneos/Shirox.app Payload/
+          ditto -c -k --keepParent Payload Shirox-metadata-unsigned.ipa
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: metadata-${{ matrix.scheme }}
+          path: |
+            xcodebuild.log
+            xcode-tests.log
+            Shirox-metadata-unsigned.ipa
