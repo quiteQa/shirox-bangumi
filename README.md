@@ -2,9 +2,21 @@
 
 版本：0.1.0。基于 2026-10-29 查看的 Shirox `main` 模块接口与 Bangumi v0 API。
 
-代码仓库：[quiteQa/shirox-bangumi](https://github.com/quiteQa/shirox-bangumi)。当前按私有仓库保存，登录有权限的 GitHub 账号后可下载代码。
+代码仓库：[quiteQa/shirox-bangumi](https://github.com/quiteQa/shirox-bangumi) · [模块清单](https://raw.githubusercontent.com/quiteQa/shirox-bangumi/main/bangumi.json) · [模块脚本](https://raw.githubusercontent.com/quiteQa/shirox-bangumi/main/bangumi.js)
 
-这是支持 URL 和文件导入的 **bgm.tv 条目与公开收藏查询模块**，并附带可供宿主接入的收藏/章节修改 API。URL 导入需要清单和脚本可匿名访问。
+用于 Shirox 的 **bgm.tv 条目与公开收藏查询模块**，支持 URL 和文件导入，并附带可供宿主接入的收藏、评分及章节进度修改 API。
+
+## URL 导入
+
+将下面的完整地址复制到 **Shirox → Settings（设置）→ Modules（模块）** 的添加模块 URL 输入框：
+
+```text
+https://raw.githubusercontent.com/quiteQa/shirox-bangumi/main/bangumi.json
+```
+
+点击添加，Shirox 会从清单中的完整 HTTPS 地址下载 `bangumi.js`。如果自动检测提示没有播放流，选择 **Keep（保留）**：这是条目和收藏查询模块，bgm.tv 不提供视频流。
+
+**URL 导入要求仓库设为 Public（公开）**，让清单和脚本都可匿名读取。私有仓库的网页链接、登录 Cookie 和临时 Raw Token 不能作为长期安装链接。若链接返回 404，请先检查仓库可见性；也可以使用下文的文件导入。
 
 ## 能做什么
 
@@ -20,22 +32,6 @@
 | 视频播放与下载 | **不提供**，bgm.tv 本身没有视频流 |
 
 它不会替换 Shirox 首页的 AniList/MyAnimeList，也不会因你在另一个模块中看完一集而修改 Bangumi。
-
-## URL 导入
-
-模块清单已使用完整的 HTTPS 脚本地址。GitHub 安装链接为：
-
-```text
-https://raw.githubusercontent.com/quiteQa/shirox-bangumi/main/bangumi.json
-```
-
-**当前仓库为私有，上述链接尚不能被 Shirox 匿名读取。** 需要将仓库设为公开，或把模块文件放到可匿名访问的 HTTPS 地址。私有仓库的网页链接、登录 Cookie 和临时 Raw Token 不适合用作长期安装链接。
-
-在清单及脚本可公开访问后：
-
-1. 打开 Shirox → Settings（设置）→ Modules（模块）。
-2. 在添加模块的 URL 输入框粘贴上面的 `bangumi.json` 链接，然后添加。
-3. 如果自动检测提示没有播放流，选择 **Keep（保留）**。这是条目和收藏查询模块，bgm.tv 不提供视频流。
 
 ## 从文件安装
 
@@ -104,7 +100,7 @@ if (first) await Bangumi.setEpisodeState(400602, [first.id], 2);
 
 Token 可由你在本机的 https://next.bgm.tv/demo/access-token 创建。**不要把 Token 发到聊天或放进公开托管的 JS**；脚本中的 Token 会随导出、备份而暴露。本模块默认 Token 留空，日常公开查询不需要 Token。原生集成应把它放在 Keychain，按当前 Shirox 个人资料隔离，并仅向 `api.bgm.tv` 注入。
 
-## 托管为 URL 模块
+## 自定义托管地址
 
 默认 `bangumi.json` 的 `scriptUrl` 已指向本仓库 `main` 分支的 `bangumi.js` 完整 HTTPS 地址；仓库公开后可直接使用上面的 GitHub 安装链接。从文件导入仍可选择本机的 JS 文件。
 
