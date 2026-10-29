@@ -31,15 +31,17 @@
   },
   "native_shirox": {
     "ios_macos_runtime": "not tested",
-    "global_metadata_provider_integration": "implemented in native/shirox-metadata.patch; all four app builds verified",
+    "global_metadata_provider_integration": "built into quiteQa/Shirox; all four app builds verified",
     "automatic_tracking_integration": "not implemented",
     "video_playback": "not supported by bgm.tv",
-    "swift_syntax": "checked with tree-sitter before execution environment disconnected; not a compiler check",
-    "xcode_project_references": "4 app source files and 1 XCTest file registered",
-    "i18n_and_icons": "passed before environment disconnect",
+    "swift_syntax": "8 changed Swift files checked with tree-sitter; compiler checks also passed",
+    "xcode_project_references": "4 app source files and 1 XCTest file registered; Bangumi.js and Bangumi.json registered exactly once for each app target",
+    "i18n_and_icons": "passed in run 40859332293",
     "xcode_build": {
-      "run_url": "https://github.com/quiteQa/shirox-bangumi/actions/runs/40844088237",
-      "source_commit": "5bfff6742955e282fad81bf6c32b66dbddbbbda1",
+      "run_url": "https://github.com/quiteQa/shirox-bangumi/actions/runs/40859332293",
+      "workflow_commit": "e5930072e2f219b383456debe4e44f0a8d3b4438",
+      "app_source_commit": "50b31671a002842708427de05fbb68098f6ce016",
+      "app_source_tree": "3c6fb91aebf585093df8e0d88d6c4b71875f0789",
       "Shirox_iOS": "success",
       "Shirox_macOS": "success",
       "Shirox_tvOS": "success",
@@ -47,8 +49,8 @@
     },
     "xctest_compilation": "success; arm64 iOS Simulator; TEST BUILD SUCCEEDED",
     "xctest_execution": "not run; simulator not booted",
-    "swiftlint": "strict check passed in run 40844088197",
-    "unsigned_ios_artifact": "https://github.com/quiteQa/shirox-bangumi/actions/runs/40844088237/artifacts/12883669458",
+    "swiftlint": "strict check passed; zero violations in run 40859332348",
+    "unsigned_ios_artifact": "https://github.com/quiteQa/shirox-bangumi/actions/runs/40859332293/artifacts/12891605917",
     "warnings": "upstream libzstd module-import and AppIntents metadata warnings remain",
     "real_device_validation": "not performed"
   },
@@ -64,7 +66,10 @@
     "network_metadata": true,
     "offline_tests_passed": 31,
     "resource_registration": "verified exactly once in each app target",
-    "xcode_build": "pending latest workflow",
-    "xctest_execution": "not run"
+    "xcode_build": "success; all four schemes",
+    "xctest_execution": "not run",
+    "xctest_compilation": "success; arm64 iOS Simulator",
+    "ipa_resource_validation": "both bundled resources exist and exactly match source",
+    "unsigned_ios_artifact": "https://github.com/quiteQa/shirox-bangumi/actions/runs/40859332293/artifacts/12891605917"
   }
 }

@@ -39,3 +39,9 @@ open Shirox.xcodeproj
 内置脚本的 31 项离线 JavaScript 测试通过；Swift 语法、本地化、图标与资源登记检查通过。构建工作流验证四个平台、编译 iOS 测试目标，并检查生成的 IPA 内含配置和脚本且与源码一致。原生测试新增了资源读取、旧版本迁移、去重与配置切换覆盖。
 
 XCTest 没有执行，尚未真机验证。上游 libzstd / AppIntents 构建警告仍可能存在。CI 使用 bash pipefail，避免日志管道掩盖编译失败。
+
+## 当前内置版已通过验证
+
+[四平台构建与测试目标编译](https://github.com/quiteQa/shirox-bangumi/actions/runs/40859332293) · [严格 SwiftLint](https://github.com/quiteQa/shirox-bangumi/actions/runs/40859332348) · [下载内置版未签名 IPA](https://github.com/quiteQa/shirox-bangumi/actions/runs/40859332293/artifacts/12891605917)
+
+源码提交 `50b31671a002842708427de05fbb68098f6ce016` 的四个 App 构建和 iOS 测试目标编译全部通过。IPA 内两份资源与源码逐字节一致。31 项 JavaScript 测试通过，SwiftLint 为零项违规；XCTest 未执行，尚未真机验证。
