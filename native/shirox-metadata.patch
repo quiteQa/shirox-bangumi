@@ -3110,3 +3110,16 @@ index 0000000..82f46e4
 +The workflow checks localization and icons, builds all four app schemes, and compiles the iOS tests without a simulator. `MetadataModuleTests` covers Bangumi subject, episode and page decoding, adult and non-anime filtering, subject links, legacy-module handling and source selection across profile reloads.
 +
 +XCTest has not been executed and real-device behavior has not been verified. Existing libzstd module-import and AppIntents metadata warnings remain. The upstream `TSAudioTimestampsTests` expression is split into intermediate values to avoid a type-check timeout without changing its behavior.
+diff --git a/scripts/i18n/i18n.py b/scripts/i18n/i18n.py
+index e8798b0..025a64b 100644
+--- a/scripts/i18n/i18n.py
++++ b/scripts/i18n/i18n.py
+@@ -86,7 +86,7 @@ UPPERCASE_WORDS = {"OK"}
+ 
+ # Names that stay as they are in every language.
+ PROPER_NOUNS = {"AniList", "MyAnimeList", "MAL", "Simkl", "Jellyfin", "TMDB", "TVDB", "Shirox", "MPV",
+-                "AirPlay", "Discord", "GitHub", "Seanime", "CloudStream", "Kitsu", "AniSkip", "iCloud"}
++                "AirPlay", "Discord", "GitHub", "Seanime", "CloudStream", "Kitsu", "AniSkip", "iCloud", "Bangumi"}
+ 
+ # A file's area: the key's first part.
+ AREAS = [
