@@ -34,6 +34,10 @@ open Shirox.xcodeproj
 
 `quiteQa/Shirox` Fork 需要同步为此补丁的内容后，才包含原生实现。
 
-## 验证范围
+## 验证结果
 
-`MetadataModuleTests` 覆盖 Bangumi 条目/剧集/分页解码、成人与非动画过滤、条目链接解析、旧模块处理及跨配置文件的来源选择。XCTest 未在模拟器中执行，尚未真机验证。
+提交 `cb05cac` 的补丁已通过：[四平台构建 + iOS 测试目标编译](https://github.com/quiteQa/shirox-bangumi/actions/runs/42334505813)（iOS / macOS / tvOS / Mac Catalyst 全部成功，i18n 与图标检查通过）、[严格 SwiftLint](https://github.com/quiteQa/shirox-bangumi/actions/runs/42334505864)（335 个文件 0 违规）。打包的 IPA 中不含 Bangumi.js / Bangumi.json。
+
+[下载未签名 iOS IPA（metadata-Shirox_iOS）](https://github.com/quiteQa/shirox-bangumi/actions/runs/42334505813/artifacts/13558892570)，解压后自行签名安装 `Shirox-metadata-unsigned.ipa`。GitHub 产物下载需要登录，保留至 2027-02-05。
+
+`MetadataModuleTests` 覆盖 Bangumi 条目/剧集/分页解码、成人与非动画过滤、条目链接解析、旧模块处理及跨配置文件的来源选择；测试已编译但未在模拟器中执行。Swift 端尚未对真实 api.bgm.tv 响应做联网验证，也未真机验证。

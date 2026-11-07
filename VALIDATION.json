@@ -1,5 +1,5 @@
 {
-  "date": "2026-10-29",
+  "date": "2026-11-07",
   "module_version": "0.3.0",
   "metadata_schema_version": 1,
   "offline_tests": {
@@ -30,46 +30,29 @@
     "reject_script_with_credentials": "passed"
   },
   "native_shirox": {
+    "implementation": "native Swift: ProviderType.bangumi + BangumiService reading api.bgm.tv/v0; no JavaScript bundled or executed",
     "ios_macos_runtime": "not tested",
-    "global_metadata_provider_integration": "built into quiteQa/Shirox; all four app builds verified",
-    "automatic_tracking_integration": "not implemented",
-    "video_playback": "not supported by bgm.tv",
-    "swift_syntax": "8 changed Swift files checked with tree-sitter; compiler checks also passed",
-    "xcode_project_references": "4 app source files and 1 XCTest file registered; Bangumi.js and Bangumi.json registered exactly once for each app target",
-    "i18n_and_icons": "passed in run 40859332293",
+    "global_metadata_provider_integration": "built-in Home/Search source beside AniList, MyAnimeList and Simkl (DiscoverySource.bangumi); kept out of the AniList/MAL provider chain",
+    "automatic_tracking_integration": "not implemented; Bangumi ids are never sent to AniList/MAL",
+    "video_playback": "not supported by bgm.tv; title page offers installed playback modules",
+    "live_bangumi_api_from_swift": "not tested; decoding covered by fixtures only",
+    "patch_base": "398d36715b34a17ec68bfd52d792f7a2e7db06f5",
+    "workflow_commit": "cb05cac610ab41f3493dd371603f49c8e29a5686",
+    "i18n_and_icons": "passed in run 42334505813",
     "xcode_build": {
-      "run_url": "https://github.com/quiteQa/shirox-bangumi/actions/runs/40859332293",
-      "workflow_commit": "e5930072e2f219b383456debe4e44f0a8d3b4438",
-      "app_source_commit": "50b31671a002842708427de05fbb68098f6ce016",
-      "app_source_tree": "3c6fb91aebf585093df8e0d88d6c4b71875f0789",
+      "run_url": "https://github.com/quiteQa/shirox-bangumi/actions/runs/42334505813",
       "Shirox_iOS": "success",
       "Shirox_macOS": "success",
       "Shirox_tvOS": "success",
       "Shirox_MacCatalyst": "success"
     },
-    "xctest_compilation": "success; arm64 iOS Simulator; TEST BUILD SUCCEEDED",
+    "xctest_compilation": "success; arm64 iOS Simulator build-for-testing",
     "xctest_execution": "not run; simulator not booted",
-    "swiftlint": "strict check passed; zero violations in run 40859332348",
-    "unsigned_ios_artifact": "https://github.com/quiteQa/shirox-bangumi/actions/runs/40859332293/artifacts/12891605917",
-    "warnings": "upstream libzstd module-import and AppIntents metadata warnings remain",
+    "swiftlint": "strict check passed; 0 violations in 335 files in run 42334505864",
+    "swiftlint_run_url": "https://github.com/quiteQa/shirox-bangumi/actions/runs/42334505864",
+    "ipa_resource_validation": "IPA contains no Bangumi.js or Bangumi.json",
+    "unsigned_ios_artifact": "https://github.com/quiteQa/shirox-bangumi/actions/runs/42334505813/artifacts/13558892570",
+    "warnings": "upstream libzstd module-import and AppIntents metadata warnings may remain",
     "real_device_validation": "not performed"
-  },
-  "builtin_bangumi": {
-    "fork": "quiteQa/Shirox",
-    "source_commit": "50b31671a002842708427de05fbb68098f6ce016",
-    "bundled_resources": [
-      "Bangumi.json",
-      "Bangumi.js"
-    ],
-    "requires_import": false,
-    "requires_login": false,
-    "network_metadata": true,
-    "offline_tests_passed": 31,
-    "resource_registration": "verified exactly once in each app target",
-    "xcode_build": "success; all four schemes",
-    "xctest_execution": "not run",
-    "xctest_compilation": "success; arm64 iOS Simulator",
-    "ipa_resource_validation": "both bundled resources exist and exactly match source",
-    "unsigned_ios_artifact": "https://github.com/quiteQa/shirox-bangumi/actions/runs/40859332293/artifacts/12891605917"
   }
 }
